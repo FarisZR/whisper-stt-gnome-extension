@@ -1,0 +1,8 @@
+{
+  "name": "Whisper-STT",
+  "description": "A Gnome extension to use openAI compatiable endpoints for speech to text like whisper.cpp.",
+  "uuid": "whisper-stt@fariszr.com",
+  "shell-version": [
+    "49"
+  ]
+}
