@@ -1,8 +1,10 @@
 {
-  "name": "Whisper-STT",
-  "description": "A Gnome extension to use openAI compatiable endpoints for speech to text like whisper.cpp.",
+  "name": "Whisper STT Toggle Recorder",
+  "description": "Toggle microphone recording with a shortcut, transcribe using an OpenAI-compatible /v1/audio/transcriptions endpoint, play a tone, and copy transcript text to the clipboard.",
   "uuid": "whisper-stt@fariszr.com",
+  "settings-schema": "org.gnome.shell.extensions.whisper-stt",
   "shell-version": [
     "49"
-  ]
+  ],
+  "url": "https://github.com/fariszr/whisper-stt-gnome-extension"
 }

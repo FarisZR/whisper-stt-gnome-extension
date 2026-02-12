@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.whisper-stt" path="/org/gnome/shell/extensions/whisper-stt/">
+    <key name="transcription-endpoint" type="s">
+      <default>'https://api.openai.com/v1/audio/transcriptions'</default>
+      <summary>Speech-to-text endpoint</summary>
+      <description>
+        OpenAI-compatible transcription endpoint URL.
+      </description>
+    </key>
+    <key name="transcription-model" type="s">
+      <default>'whisper-1'</default>
+      <summary>Transcription model</summary>
+      <description>
+        Model name sent to the transcription endpoint.
+      </description>
+    </key>
+    <key name="api-key" type="s">
+      <default>''</default>
+      <summary>API key</summary>
+      <description>
+        API key used as a bearer token. Leave empty for unauthenticated endpoints.
+      </description>
+    </key>
+    <key name="language" type="s">
+      <default>''</default>
+      <summary>Language</summary>
+      <description>
+        Optional language hint such as en.
+      </description>
+    </key>
+    <key name="prompt" type="s">
+      <default>''</default>
+      <summary>Prompt</summary>
+      <description>
+        Optional prompt to guide transcription.
+      </description>
+    </key>
+    <key name="response-format" type="s">
+      <default>'json'</default>
+      <summary>Response format</summary>
+      <description>
+        Response format sent to the endpoint. Typical values are json or text.
+      </description>
+    </key>
+    <key name="toggle-recording-shortcut" type="as">
+      <default>['&lt;Ctrl&gt;&lt;Super&gt;space']</default>
+      <summary>Shortcut for starting or stopping recording</summary>
+      <description>
+        Press this shortcut to toggle recording.
+      </description>
+    </key>
+  </schema>
+</schemalist>

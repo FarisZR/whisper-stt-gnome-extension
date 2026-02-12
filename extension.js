@@ -1,56 +1,45 @@
-/* extension.js
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * SPDX-License-Identifier: GPL-2.0-or-later
- */
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 
-import GObject from 'gi://GObject';
-import St from 'gi://St';
-
-import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const Indicator = GObject.registerClass(
-class Indicator extends PanelMenu.Button {
-    _init() {
-        super._init(0.0, _('My Shiny Indicator'));
+import {WhisperController} from './src/core/whisperController.js';
+import {VoiceOverlay} from './src/gnome/overlay.js';
+import {createRuntimeDeps} from './src/gnome/runtimeDeps.js';
 
-        this.add_child(new St.Icon({
-            icon_name: 'face-smile-symbolic',
-            style_class: 'system-status-icon',
+const KEYBINDING_NAME = 'toggle-recording-shortcut';
+
+export default class WhisperSttExtension extends Extension {
+    enable() {
+        this._settings = this.getSettings();
+        this._overlay = new VoiceOverlay();
+        this._controller = new WhisperController(createRuntimeDeps({
+            settings: this._settings,
+            overlay: this._overlay,
+            title: this.metadata.name,
         }));
 
-        let item = new PopupMenu.PopupMenuItem(_('Show Notification'));
-        item.connect('activate', () => {
-            Main.notify(_('Whatʼs up, folks?'));
-        });
-        this.menu.addMenuItem(item);
-    }
-});
-
-export default class IndicatorExampleExtension extends Extension {
-    enable() {
-        this._indicator = new Indicator();
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        Main.wm.addKeybinding(
+            KEYBINDING_NAME,
+            this._settings,
+            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP,
+            () => {
+                void this._controller.toggle();
+            }
+        );
     }
 
     disable() {
-        this._indicator.destroy();
-        this._indicator = null;
+        Main.wm.removeKeybinding(KEYBINDING_NAME);
+
+        if (this._controller)
+            void this._controller.disable();
+
+        this._overlay?.destroy();
+        this._overlay = null;
+        this._controller = null;
+        this._settings = null;
     }
 }

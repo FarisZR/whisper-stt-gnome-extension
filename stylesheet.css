@@ -1,1 +1,23 @@
-/* Add your custom extension styling here */
+.whisper-stt-overlay {
+    background-color: rgba(20, 22, 30, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    padding: 12px 14px;
+    spacing: 10px;
+}
+
+.whisper-stt-title {
+    color: #dce6ff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.whisper-stt-bars {
+    spacing: 5px;
+}
+
+.whisper-stt-bar {
+    width: 10px;
+    background-color: #38bdf8;
+    border-radius: 999px;
+}
