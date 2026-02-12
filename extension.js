@@ -9,10 +9,11 @@ import {VoiceOverlay} from './src/gnome/overlay.js';
 import {createRuntimeDeps} from './src/gnome/runtimeDeps.js';
 
 const KEYBINDING_NAME = 'toggle-recording-shortcut';
+const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.whisper-stt';
 
 export default class WhisperSttExtension extends Extension {
     enable() {
-        this._settings = this.getSettings();
+        this._settings = this.getSettings(SETTINGS_SCHEMA);
         this._overlay = new VoiceOverlay();
         this._controller = new WhisperController(createRuntimeDeps({
             settings: this._settings,

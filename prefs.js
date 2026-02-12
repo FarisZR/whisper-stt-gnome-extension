@@ -2,6 +2,8 @@ import Adw from 'gi://Adw';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.whisper-stt';
+
 function _addStringRow(group, settings, title, key, subtitle = '') {
     const row = new Adw.EntryRow({
         title,
@@ -27,7 +29,7 @@ function _addStringRow(group, settings, title, key, subtitle = '') {
 
 export default class WhisperSttPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        const settings = this.getSettings();
+        const settings = this.getSettings(SETTINGS_SCHEMA);
 
         const page = new Adw.PreferencesPage({
             title: _('General'),
