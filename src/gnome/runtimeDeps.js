@@ -7,6 +7,7 @@ import {buildRecordingCommand} from '../core/pipelineCommand.js';
 import {parseLevelLine, smoothLevel} from '../core/levelParser.js';
 import {buildCurlArgs} from '../core/curlCommand.js';
 import {splitBodyAndStatus, parseTranscriptionResponse} from '../core/transcriptionParser.js';
+import {getToneEvents} from '../core/toneEvents.js';
 import {runCommand, spawnLineProcess} from './process.js';
 
 function _settingsToObject(settings) {
@@ -58,12 +59,17 @@ async function _copyToClipboard(text) {
 }
 
 async function _playTone(kind) {
-    const icon = kind === 'error' ? 'dialog-warning' : 'complete';
+    const eventIds = getToneEvents(kind);
 
-    try {
-        await runCommand(['canberra-gtk-play', '-i', icon]);
-    } catch (_error) {
-        // Tone is best effort.
+    for (const eventId of eventIds) {
+        try {
+            const result = await runCommand(['canberra-gtk-play', '-i', eventId]);
+
+            if (result.success)
+                return;
+        } catch (_error) {
+            // Try fallback tone ids.
+        }
     }
 }
 
