@@ -83,18 +83,23 @@ export function createRuntimeDeps({settings, overlay, title}) {
         async startRecording(path) {
             currentLevel = 0;
             const command = buildRecordingCommand(path);
+
+            const onMeterLine = line => {
+                const level = parseLevelLine(line);
+                if (level === null)
+                    return;
+
+                currentLevel = smoothLevel(currentLevel, level, 0.35);
+
+                for (const listener of levelListeners)
+                    listener(currentLevel);
+            };
+
             const processHandle = spawnLineProcess(command, {
-                onStdoutLine: line => {
-                    const level = parseLevelLine(line);
-                    if (level === null)
-                        return;
-
-                    currentLevel = smoothLevel(currentLevel, level, 0.35);
-
-                    for (const listener of levelListeners)
-                        listener(currentLevel);
-                },
+                onStdoutLine: onMeterLine,
                 onStderrLine: line => {
+                    onMeterLine(line);
+
                     if (line.includes('ERROR'))
                         log(`[whisper-stt] ${line}`);
                 },

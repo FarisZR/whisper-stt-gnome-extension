@@ -1,23 +1,11 @@
-.whisper-stt-overlay {
-    background-color: rgba(20, 22, 30, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 14px;
-    padding: 12px 14px;
-    spacing: 10px;
+.whisper-stt-osd-window {
+    margin-bottom: 4em;
 }
 
-.whisper-stt-title {
-    color: #dce6ff;
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.whisper-stt-bars {
-    spacing: 5px;
-}
-
-.whisper-stt-bar {
-    width: 10px;
-    background-color: #38bdf8;
-    border-radius: 999px;
+.whisper-stt-level {
+    min-width: 220px;
+    -barlevel-background-color: rgba(255, 255, 255, 0.1);
+    -barlevel-active-background-color: #ffffff;
+    -barlevel-overdrive-color: #ffffff;
+    -barlevel-overdrive-separator-width: 0;
 }

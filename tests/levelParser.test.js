@@ -6,8 +6,8 @@ test('parseLevelLine extracts the loudest peak and normalizes it', () => {
     const value = parseLevelLine(line);
 
     assert(value !== null);
-    assert(value > 0.6);
-    assert(value < 0.7);
+    assert(value > 0.8);
+    assert(value < 0.9);
 });
 
 test('parseLevelLine clamps very quiet levels to zero', () => {
@@ -28,6 +28,13 @@ test('parseLevelLine returns null for empty peak values', () => {
 
 test('parseLevelLine clamps positive values to one', () => {
     assertEqual(parseLevelLine('peak=(GValueArray)< 1.5 >'), 1);
+});
+
+test('parseLevelLine accepts spaced and comma decimal values', () => {
+    const value = parseLevelLine('peak = (GValueArray) < -30,5, -40,2 >');
+    assert(value !== null);
+    assert(value > 0.6);
+    assert(value < 0.8);
 });
 
 test('smoothLevel applies smoothing factor', () => {
