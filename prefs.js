@@ -11,7 +11,7 @@ function _addStringRow(group, settings, title, key, subtitle = '') {
     });
 
     if (subtitle)
-        row.set_subtitle(subtitle);
+        row.set_tooltip_text(subtitle);
 
     row.connect('changed', () => {
         settings.set_string(key, row.get_text());
@@ -60,7 +60,7 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
             title: _('Toggle Recording Shortcut'),
             text: settings.get_strv('toggle-recording-shortcut')[0] ?? '',
         });
-        shortcutRow.set_subtitle(_('Example: <Ctrl><Super>space'));
+        shortcutRow.set_tooltip_text(_('Example: <Ctrl><Super>space'));
 
         shortcutRow.connect('changed', () => {
             const value = shortcutRow.get_text().trim();
