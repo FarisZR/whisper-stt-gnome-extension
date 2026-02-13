@@ -92,7 +92,7 @@ export class VoiceOverlay {
             style_class: 'whisper-stt-waves',
             vertical: false,
             x_align: Clutter.ActorAlign.CENTER,
-            x_expand: true,
+            x_expand: false,
         });
         box.add_child(waves);
 
