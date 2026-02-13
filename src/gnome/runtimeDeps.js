@@ -4,11 +4,12 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {buildRecordingCommand} from '../core/pipelineCommand.js';
-import {parseLevelLine, smoothLevel} from '../core/levelParser.js';
+import {smoothLevel} from '../core/levelParser.js';
+import {pcmS16Level} from '../core/pcmLevel.js';
 import {buildCurlArgs} from '../core/curlCommand.js';
 import {splitBodyAndStatus, parseTranscriptionResponse} from '../core/transcriptionParser.js';
 import {getToneEvents} from '../core/toneEvents.js';
-import {runCommand, spawnLineProcess} from './process.js';
+import {runCommand, spawnLineProcess, spawnByteProcess} from './process.js';
 
 function _settingsToObject(settings) {
     return {
@@ -76,6 +77,51 @@ async function _playTone(kind) {
 export function createRuntimeDeps({settings, overlay, title}) {
     const levelListeners = new Set();
     let currentLevel = 0;
+    let meterProcess = null;
+
+    const startMeter = () => {
+        if (meterProcess)
+            return;
+
+        try {
+            meterProcess = spawnByteProcess([
+                'pw-record',
+                '--raw',
+                '--rate',
+                '16000',
+                '--channels',
+                '1',
+                '--format',
+                's16',
+                '-',
+            ], {
+                onStdoutChunk: chunk => {
+                    const level = pcmS16Level(chunk);
+                    currentLevel = smoothLevel(currentLevel, level, 0.25);
+
+                    for (const listener of levelListeners)
+                        listener(currentLevel);
+                },
+                onStderrLine: line => {
+                    if (line.toLowerCase().includes('error'))
+                        log(`[whisper-stt] meter: ${line}`);
+                },
+            });
+        } catch (error) {
+            meterProcess = null;
+            log(`[whisper-stt] Failed to start microphone meter: ${error}`);
+        }
+    };
+
+    const stopMeter = async () => {
+        if (!meterProcess)
+            return;
+
+        const process = meterProcess;
+        meterProcess = null;
+        await process.stop();
+        currentLevel = 0;
+    };
 
     return {
         getSettings() {
@@ -89,23 +135,8 @@ export function createRuntimeDeps({settings, overlay, title}) {
         async startRecording(path) {
             currentLevel = 0;
             const command = buildRecordingCommand(path);
-
-            const onMeterLine = line => {
-                const level = parseLevelLine(line);
-                if (level === null)
-                    return;
-
-                currentLevel = smoothLevel(currentLevel, level, 0.35);
-
-                for (const listener of levelListeners)
-                    listener(currentLevel);
-            };
-
             const processHandle = spawnLineProcess(command, {
-                onStdoutLine: onMeterLine,
                 onStderrLine: line => {
-                    onMeterLine(line);
-
                     if (line.includes('ERROR'))
                         log(`[whisper-stt] ${line}`);
                 },
@@ -121,10 +152,14 @@ export function createRuntimeDeps({settings, overlay, title}) {
         async startLevelMonitor(onLevel) {
             levelListeners.add(onLevel);
             onLevel(currentLevel);
+            startMeter();
 
             return {
                 async stop() {
                     levelListeners.delete(onLevel);
+
+                    if (levelListeners.size === 0)
+                        await stopMeter();
                 },
             };
         },
@@ -158,6 +193,9 @@ export function createRuntimeDeps({settings, overlay, title}) {
         },
 
         async cleanupRecording(path) {
+            if (levelListeners.size === 0)
+                await stopMeter();
+
             _deleteFile(path);
         },
     };

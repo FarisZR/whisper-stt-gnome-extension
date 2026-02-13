@@ -1,11 +1,17 @@
 .whisper-stt-osd-window {
     margin-bottom: 4em;
+    padding: 12px 20px;
 }
 
-.whisper-stt-level {
-    min-width: 220px;
-    -barlevel-background-color: rgba(255, 255, 255, 0.1);
-    -barlevel-active-background-color: #ffffff;
-    -barlevel-overdrive-color: #ffffff;
-    -barlevel-overdrive-separator-width: 0;
+.whisper-stt-waves {
+    spacing: 4px;
+    min-width: 240px;
+    min-height: 34px;
+}
+
+.whisper-stt-wave-bar {
+    width: 6px;
+    border-radius: 999px;
+    background-color: #ffffff;
+    opacity: 0.95;
 }

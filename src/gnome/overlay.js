@@ -2,22 +2,24 @@ import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
-import * as BarLevel from 'resource:///org/gnome/shell/ui/barLevel.js';
 import * as Layout from 'resource:///org/gnome/shell/ui/layout.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const LEVEL_TICK_INTERVAL_MS = 50;
 const LEVEL_DECAY_FACTOR = 0.82;
-const LEVEL_ANIMATION_TIME_MS = 100;
+const BAR_COUNT = 18;
+const BASE_HEIGHT = 8;
+const EXTRA_HEIGHT = 24;
 
 export class VoiceOverlay {
     constructor() {
         this._actor = null;
         this._monitorConstraint = null;
-        this._level = null;
+        this._bars = [];
         this._tickId = 0;
         this._targetLevel = 0;
         this._visibleLevel = 0;
+        this._phase = 0;
     }
 
     show() {
@@ -26,7 +28,8 @@ export class VoiceOverlay {
 
         this._targetLevel = 0;
         this._visibleLevel = 0;
-        this._level.value = 0;
+        this._phase = 0;
+        this._renderBars();
         this._actor.opacity = 255;
         this._actor.show();
 
@@ -58,7 +61,7 @@ export class VoiceOverlay {
         this._actor.destroy();
         this._actor = null;
         this._monitorConstraint = null;
-        this._level = null;
+        this._bars = [];
     }
 
     _build() {
@@ -78,29 +81,22 @@ export class VoiceOverlay {
 
         const box = new St.BoxLayout({
             style_class: 'osd-window whisper-stt-osd-window',
-            vertical: false,
+            vertical: true,
         });
         this._actor.add_child(box);
 
-        const icon = new St.Icon({
-            icon_name: 'audio-input-microphone-symbolic',
-            y_expand: true,
+        const waves = new St.BoxLayout({
+            style_class: 'whisper-stt-waves',
+            vertical: false,
         });
-        box.add_child(icon);
+        box.add_child(waves);
 
-        const vbox = new St.BoxLayout({
-            vertical: true,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        box.add_child(vbox);
-
-        this._level = new BarLevel.BarLevel({
-            style_class: 'level whisper-stt-level',
-            value: 0,
-        });
-        this._level.maximumValue = 1;
-        this._level.overdriveStart = 1;
-        vbox.add_child(this._level);
+        for (let i = 0; i < BAR_COUNT; i += 1) {
+            const bar = new St.Widget({style_class: 'whisper-stt-wave-bar'});
+            bar.set_style(`height: ${BASE_HEIGHT}px;`);
+            waves.add_child(bar);
+            this._bars.push(bar);
+        }
 
         Main.uiGroup.add_child(this._actor);
     }
@@ -111,11 +107,8 @@ export class VoiceOverlay {
 
         this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LEVEL_TICK_INTERVAL_MS, () => {
             this._visibleLevel = Math.max(this._targetLevel, this._visibleLevel * LEVEL_DECAY_FACTOR);
-
-            this._level.ease_property('value', this._visibleLevel, {
-                duration: LEVEL_ANIMATION_TIME_MS,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
+            this._phase += 0.4;
+            this._renderBars();
 
             return GLib.SOURCE_CONTINUE;
         });
@@ -128,5 +121,19 @@ export class VoiceOverlay {
 
         GLib.source_remove(this._tickId);
         this._tickId = 0;
+    }
+
+    _renderBars() {
+        if (this._bars.length === 0)
+            return;
+
+        for (let i = 0; i < this._bars.length; i += 1) {
+            const wave = 0.35 + Math.abs(Math.sin(this._phase + i * 0.45)) * 0.65;
+            const baseline = 0.08;
+            const amplitude = baseline + this._visibleLevel * wave;
+            const height = BASE_HEIGHT + Math.round(amplitude * EXTRA_HEIGHT);
+
+            this._bars[i].set_style(`height: ${height}px;`);
+        }
     }
 }

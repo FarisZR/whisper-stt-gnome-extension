@@ -1,6 +1,7 @@
 import './settings.test.js';
 import './pipelineCommand.test.js';
 import './levelParser.test.js';
+import './pcmLevel.test.js';
 import './transcriptionParser.test.js';
 import './curlCommand.test.js';
 import './toneEvents.test.js';
