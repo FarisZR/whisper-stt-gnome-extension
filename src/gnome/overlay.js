@@ -6,10 +6,12 @@ import * as Layout from 'resource:///org/gnome/shell/ui/layout.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const LEVEL_TICK_INTERVAL_MS = 50;
-const LEVEL_DECAY_FACTOR = 0.82;
+const LEVEL_ATTACK_SMOOTHING = 0.45;
+const LEVEL_RELEASE_SMOOTHING = 0.2;
 const BAR_COUNT = 18;
 const BASE_HEIGHT = 8;
-const EXTRA_HEIGHT = 24;
+const EXTRA_HEIGHT = 22;
+const BAR_WIDTH = 6;
 
 export class VoiceOverlay {
     constructor() {
@@ -82,18 +84,27 @@ export class VoiceOverlay {
         const box = new St.BoxLayout({
             style_class: 'osd-window whisper-stt-osd-window',
             vertical: true,
+            x_align: Clutter.ActorAlign.CENTER,
         });
         this._actor.add_child(box);
 
         const waves = new St.BoxLayout({
             style_class: 'whisper-stt-waves',
             vertical: false,
+            x_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
         });
         box.add_child(waves);
 
         for (let i = 0; i < BAR_COUNT; i += 1) {
-            const bar = new St.Widget({style_class: 'whisper-stt-wave-bar'});
-            bar.set_style(`height: ${BASE_HEIGHT}px;`);
+            const bar = new St.Widget({
+                style_class: 'whisper-stt-wave-bar',
+                y_align: Clutter.ActorAlign.END,
+                y_expand: false,
+                x_expand: false,
+            });
+            bar.set_width(BAR_WIDTH);
+            bar.set_height(BASE_HEIGHT);
             waves.add_child(bar);
             this._bars.push(bar);
         }
@@ -106,7 +117,11 @@ export class VoiceOverlay {
             return;
 
         this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LEVEL_TICK_INTERVAL_MS, () => {
-            this._visibleLevel = Math.max(this._targetLevel, this._visibleLevel * LEVEL_DECAY_FACTOR);
+            const smoothing = this._targetLevel >= this._visibleLevel
+                ? LEVEL_ATTACK_SMOOTHING
+                : LEVEL_RELEASE_SMOOTHING;
+
+            this._visibleLevel = this._visibleLevel * (1 - smoothing) + this._targetLevel * smoothing;
             this._phase += 0.4;
             this._renderBars();
 
@@ -127,13 +142,17 @@ export class VoiceOverlay {
         if (this._bars.length === 0)
             return;
 
+        const center = (this._bars.length - 1) / 2;
+
         for (let i = 0; i < this._bars.length; i += 1) {
-            const wave = 0.35 + Math.abs(Math.sin(this._phase + i * 0.45)) * 0.65;
-            const baseline = 0.08;
-            const amplitude = baseline + this._visibleLevel * wave;
+            const distance = Math.abs(i - center) / center;
+            const envelope = 0.32 + (1 - distance) * 0.68;
+            const motion = 0.6 + Math.abs(Math.sin(this._phase + distance * 4.0)) * 0.4;
+            const baseline = 0.12;
+            const amplitude = baseline + this._visibleLevel * envelope * motion;
             const height = BASE_HEIGHT + Math.round(amplitude * EXTRA_HEIGHT);
 
-            this._bars[i].set_style(`height: ${height}px;`);
+            this._bars[i].set_height(height);
         }
     }
 }
