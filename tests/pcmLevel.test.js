@@ -21,6 +21,11 @@ test('pcmS16Level returns zero for empty input', () => {
     assertEqual(pcmS16Level(new Uint8Array()), 0);
 });
 
+test('pcmS16Level returns zero for non-byte input', () => {
+    assertEqual(pcmS16Level(null), 0);
+    assertEqual(pcmS16Level({}), 0);
+});
+
 test('pcmS16Level returns zero for silence', () => {
     const bytes = samplesToBytes([0, 0, 0, 0, 0, 0]);
     assertEqual(pcmS16Level(bytes), 0);
@@ -30,8 +35,16 @@ test('pcmS16Level detects moderate speech-like amplitude', () => {
     const bytes = samplesToBytes([1200, -1100, 1500, -1400, 800, -900]);
     const level = pcmS16Level(bytes);
 
-    assert(level > 0.05);
-    assert(level < 0.5);
+    assert(level > 0.25);
+    assert(level < 0.7);
+});
+
+test('pcmS16Level supports signed byte views', () => {
+    const bytes = new Int8Array(samplesToBytes([1200, -1200]).buffer);
+    const level = pcmS16Level(bytes);
+
+    assert(level > 0.1);
+    assert(level < 0.7);
 });
 
 test('pcmS16Level clamps loud samples to one', () => {

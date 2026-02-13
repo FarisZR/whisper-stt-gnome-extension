@@ -11,6 +11,10 @@ import {splitBodyAndStatus, parseTranscriptionResponse} from '../core/transcript
 import {getToneEvents} from '../core/toneEvents.js';
 import {runCommand, spawnLineProcess, spawnByteProcess} from './process.js';
 
+const METER_STALE_TIMEOUT_US = 250000;
+const METER_DECAY_INTERVAL_MS = 50;
+const METER_DECAY_SMOOTHING = 0.2;
+
 function _settingsToObject(settings) {
     return {
         endpoint: settings.get_string('transcription-endpoint'),
@@ -78,12 +82,49 @@ export function createRuntimeDeps({settings, overlay, title}) {
     const levelListeners = new Set();
     let currentLevel = 0;
     let meterProcess = null;
+    let meterDecayTimeoutId = 0;
+    let lastMeterSampleAt = 0;
+
+    const notifyLevelListeners = () => {
+        for (const listener of levelListeners)
+            listener(currentLevel);
+    };
+
+    const startMeterDecay = () => {
+        if (meterDecayTimeoutId !== 0)
+            return;
+
+        meterDecayTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, METER_DECAY_INTERVAL_MS, () => {
+            if (levelListeners.size === 0)
+                return GLib.SOURCE_CONTINUE;
+
+            const now = GLib.get_monotonic_time();
+
+            if (now - lastMeterSampleAt > METER_STALE_TIMEOUT_US) {
+                currentLevel = smoothLevel(currentLevel, 0, METER_DECAY_SMOOTHING);
+                notifyLevelListeners();
+            }
+
+            return GLib.SOURCE_CONTINUE;
+        });
+        GLib.Source.set_name_by_id(meterDecayTimeoutId, '[whisper-stt] meter-decay');
+    };
+
+    const stopMeterDecay = () => {
+        if (meterDecayTimeoutId === 0)
+            return;
+
+        GLib.source_remove(meterDecayTimeoutId);
+        meterDecayTimeoutId = 0;
+    };
 
     const startMeter = () => {
         if (meterProcess)
             return;
 
         try {
+            lastMeterSampleAt = GLib.get_monotonic_time();
+
             meterProcess = spawnByteProcess([
                 'pw-record',
                 '--raw',
@@ -97,16 +138,17 @@ export function createRuntimeDeps({settings, overlay, title}) {
             ], {
                 onStdoutChunk: chunk => {
                     const level = pcmS16Level(chunk);
+                    lastMeterSampleAt = GLib.get_monotonic_time();
                     currentLevel = smoothLevel(currentLevel, level, 0.25);
-
-                    for (const listener of levelListeners)
-                        listener(currentLevel);
+                    notifyLevelListeners();
                 },
                 onStderrLine: line => {
                     if (line.toLowerCase().includes('error'))
                         log(`[whisper-stt] meter: ${line}`);
                 },
             });
+
+            startMeterDecay();
         } catch (error) {
             meterProcess = null;
             log(`[whisper-stt] Failed to start microphone meter: ${error}`);
@@ -114,13 +156,19 @@ export function createRuntimeDeps({settings, overlay, title}) {
     };
 
     const stopMeter = async () => {
-        if (!meterProcess)
+        stopMeterDecay();
+
+        if (!meterProcess) {
+            currentLevel = 0;
+            lastMeterSampleAt = 0;
             return;
+        }
 
         const process = meterProcess;
         meterProcess = null;
         await process.stop();
         currentLevel = 0;
+        lastMeterSampleAt = 0;
     };
 
     return {
