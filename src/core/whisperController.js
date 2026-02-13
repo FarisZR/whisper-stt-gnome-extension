@@ -5,11 +5,16 @@ import {createSpeechDetector} from './speechDetector.js';
 
 const OPERATION_TIMEOUT_MS = 700;
 const TRANSCRIPTION_TIMEOUT_MS = 120000;
+const CLIPBOARD_TIMEOUT_MS = 2500;
+const TRANSCRIBING_WATCHDOG_MS = 150000;
 
 export class WhisperController {
     constructor(deps) {
         const {
             operationTimeoutMs = OPERATION_TIMEOUT_MS,
+            transcriptionTimeoutMs = TRANSCRIPTION_TIMEOUT_MS,
+            clipboardTimeoutMs = CLIPBOARD_TIMEOUT_MS,
+            transcribingWatchdogMs = TRANSCRIBING_WATCHDOG_MS,
             ...runtimeDeps
         } = deps;
 
@@ -17,9 +22,20 @@ export class WhisperController {
         this._operationTimeoutMs = Number.isFinite(operationTimeoutMs)
             ? Math.max(50, operationTimeoutMs)
             : OPERATION_TIMEOUT_MS;
+        this._transcriptionTimeoutMs = Number.isFinite(transcriptionTimeoutMs)
+            ? Math.max(100, transcriptionTimeoutMs)
+            : TRANSCRIPTION_TIMEOUT_MS;
+        this._clipboardTimeoutMs = Number.isFinite(clipboardTimeoutMs)
+            ? Math.max(50, clipboardTimeoutMs)
+            : CLIPBOARD_TIMEOUT_MS;
+        this._transcribingWatchdogMs = Number.isFinite(transcribingWatchdogMs)
+            ? Math.max(100, transcribingWatchdogMs)
+            : TRANSCRIBING_WATCHDOG_MS;
 
         this._state = 'idle';
         this._session = null;
+        this._toggleInFlight = false;
+        this._transcribingWatchdogId = 0;
     }
 
     get state() {
@@ -27,21 +43,36 @@ export class WhisperController {
     }
 
     async toggle() {
-        if (this._state === 'transcribing') {
-            this._deps.notify('Transcription in progress');
+        if (this._toggleInFlight) {
+            if (this._state === 'transcribing')
+                this._deps.notify('Transcription in progress');
+
             return;
         }
 
-        if (this._state === 'idle') {
-            await this._startRecording();
-            return;
-        }
+        this._toggleInFlight = true;
 
-        if (this._state === 'recording')
-            await this._finishRecording();
+        try {
+            if (this._state === 'transcribing') {
+                this._deps.notify('Transcription in progress');
+                return;
+            }
+
+            if (this._state === 'idle') {
+                await this._startRecording();
+                return;
+            }
+
+            if (this._state === 'recording')
+                await this._finishRecording();
+        } finally {
+            this._toggleInFlight = false;
+        }
     }
 
     async disable() {
+        this._clearTranscribingWatchdog();
+
         if (this._state !== 'recording') {
             this._state = 'idle';
             this._session = null;
@@ -101,6 +132,7 @@ export class WhisperController {
         }
 
         this._state = 'transcribing';
+        this._startTranscribingWatchdog(session);
         let toneKind = 'success';
 
         try {
@@ -117,13 +149,27 @@ export class WhisperController {
 
             const transcript = await this._runWithTimeout(
                 () => this._deps.transcribeRecording(session.path, session.settings),
-                TRANSCRIPTION_TIMEOUT_MS
+                this._transcriptionTimeoutMs
             );
             const cleaned = typeof transcript === 'string' ? transcript.trim() : '';
 
             if (cleaned.length > 0) {
-                await this._deps.copyToClipboard(cleaned);
-                this._deps.notify('Transcription copied to clipboard');
+                let copied = false;
+
+                try {
+                    await this._runWithTimeout(
+                        () => this._deps.copyToClipboard(cleaned),
+                        this._clipboardTimeoutMs
+                    );
+                    copied = true;
+                } catch (_error) {
+                    copied = false;
+                }
+
+                if (copied)
+                    this._deps.notify('Transcription copied to clipboard');
+                else
+                    this._deps.notify('Transcription ready, but clipboard copy timed out.');
             } else {
                 this._deps.notify('Transcription finished with empty text');
             }
@@ -132,12 +178,40 @@ export class WhisperController {
             this._deps.notify(`Transcription failed: ${error.message}`);
             toneKind = 'error';
         } finally {
+            this._clearTranscribingWatchdog();
             this._session = null;
             this._state = 'idle';
 
             void this._runBestEffort(() => this._deps.playTone(toneKind));
             void this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
         }
+    }
+
+    _startTranscribingWatchdog(session) {
+        this._clearTranscribingWatchdog();
+
+        this._transcribingWatchdogId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._transcribingWatchdogMs, () => {
+            if (this._state !== 'transcribing')
+                return GLib.SOURCE_REMOVE;
+
+            this._deps.notify('Transcription took too long. Resetting state.');
+            this._state = 'idle';
+            this._session = null;
+
+            void this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
+
+            this._transcribingWatchdogId = 0;
+            return GLib.SOURCE_REMOVE;
+        });
+        GLib.Source.set_name_by_id(this._transcribingWatchdogId, '[whisper-stt] transcribing-watchdog');
+    }
+
+    _clearTranscribingWatchdog() {
+        if (this._transcribingWatchdogId === 0)
+            return;
+
+        GLib.source_remove(this._transcribingWatchdogId);
+        this._transcribingWatchdogId = 0;
     }
 
     async _runBestEffort(action, timeoutMs = this._operationTimeoutMs) {

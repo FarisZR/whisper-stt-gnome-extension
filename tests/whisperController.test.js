@@ -1,5 +1,16 @@
+import GLib from 'gi://GLib';
+
 import {test, assert, assertEqual, assertIncludes} from './harness.js';
 import {WhisperController} from '../src/core/whisperController.js';
+
+function waitMs(milliseconds) {
+    return new Promise(resolve => {
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, milliseconds, () => {
+            resolve();
+            return GLib.SOURCE_REMOVE;
+        });
+    });
+}
 
 function createDeps(overrides = {}) {
     const calls = [];
@@ -224,13 +235,41 @@ test('hanging recorder stop does not keep controller transcribing', async () => 
     assert(calls.includes('copyToClipboard:hello world'));
 });
 
+test('hanging clipboard copy times out and allows next recording', async () => {
+    const {deps, calls} = createDeps({
+        operationTimeoutMs: 30,
+        async copyToClipboard(text) {
+            calls.push(`copyToClipboard:${text}`);
+            return await new Promise(() => {});
+        },
+    });
+
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    await controller.toggle();
+
+    assertEqual(controller.state, 'idle');
+    assert(calls.some(c => c.startsWith('notify:Transcription ready, but clipboard copy timed out.')));
+
+    await controller.toggle();
+    const startCalls = calls.filter(c => c.startsWith('startRecording:'));
+    assertEqual(startCalls.length, 2);
+});
+
 test('invalid operation timeout falls back to default', () => {
     const {deps} = createDeps({
         operationTimeoutMs: Number.NaN,
+        transcriptionTimeoutMs: Number.NaN,
+        clipboardTimeoutMs: Number.NaN,
+        transcribingWatchdogMs: Number.NaN,
     });
 
     const controller = new WhisperController(deps);
     assertEqual(controller._operationTimeoutMs, 700);
+    assertEqual(controller._transcriptionTimeoutMs, 120000);
+    assertEqual(controller._clipboardTimeoutMs, 2500);
+    assertEqual(controller._transcribingWatchdogMs, 150000);
 });
 
 test('toggle while transcribing reports busy', async () => {
@@ -261,6 +300,18 @@ test('toggle while transcribing reports busy', async () => {
     assertIncludes(String(busyNotification), 'Transcription in progress');
 });
 
+test('toggle reports busy when state is transcribing without active lock', async () => {
+    const {deps, calls} = createDeps();
+    const controller = new WhisperController(deps);
+
+    controller._state = 'transcribing';
+    controller._toggleInFlight = false;
+
+    await controller.toggle();
+
+    assert(calls.some(c => c.startsWith('notify:Transcription in progress')));
+});
+
 test('disable while recording stops resources and cleans up', async () => {
     const {deps, calls} = createDeps();
     const controller = new WhisperController(deps);
@@ -283,6 +334,51 @@ test('disable from idle is a no-op', async () => {
 
     assertEqual(controller.state, 'idle');
     assert(!calls.includes('hideOverlay'));
+});
+
+test('disable from transcribing resets state to idle', async () => {
+    const {deps} = createDeps();
+    const controller = new WhisperController(deps);
+
+    controller._state = 'transcribing';
+    controller._session = {path: '/tmp/recording.wav'};
+
+    await controller.disable();
+
+    assertEqual(controller.state, 'idle');
+    assertEqual(controller._session, null);
+});
+
+test('watchdog resets transcribing state and cleans up', async () => {
+    const {deps, calls} = createDeps({
+        transcribingWatchdogMs: 100,
+    });
+    const controller = new WhisperController(deps);
+
+    controller._state = 'transcribing';
+    controller._session = {path: '/tmp/recording.wav'};
+    controller._startTranscribingWatchdog(controller._session);
+
+    await waitMs(180);
+
+    assertEqual(controller.state, 'idle');
+    assert(calls.some(c => c.startsWith('notify:Transcription took too long')));
+    assert(calls.includes('cleanupRecording:/tmp/recording.wav'));
+});
+
+test('watchdog exits quietly when no longer transcribing', async () => {
+    const {deps, calls} = createDeps({
+        transcribingWatchdogMs: 100,
+    });
+    const controller = new WhisperController(deps);
+
+    controller._state = 'idle';
+    controller._session = null;
+    controller._startTranscribingWatchdog({path: '/tmp/recording.wav'});
+
+    await waitMs(180);
+
+    assert(!calls.some(c => c.startsWith('notify:Transcription took too long')));
 });
 
 test('no detected speech skips transcription and notifies', async () => {
