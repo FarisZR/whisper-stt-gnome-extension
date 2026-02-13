@@ -182,6 +182,34 @@ test('transcription failure returns to idle and plays error tone', async () => {
     assert(calls.some(c => c.startsWith('notify:Transcription failed')));
 });
 
+test('hanging success tone does not keep controller transcribing', async () => {
+    const {deps, calls} = createDeps({
+        operationTimeoutMs: 30,
+        async playTone(kind) {
+            calls.push(`playTone:${kind}`);
+            return await new Promise(() => {});
+        },
+    });
+
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    await controller.toggle();
+
+    assertEqual(controller.state, 'idle');
+    assert(calls.includes('copyToClipboard:hello world'));
+    assert(calls.includes('playTone:success'));
+});
+
+test('invalid operation timeout falls back to default', () => {
+    const {deps} = createDeps({
+        operationTimeoutMs: Number.NaN,
+    });
+
+    const controller = new WhisperController(deps);
+    assertEqual(controller._operationTimeoutMs, 700);
+});
+
 test('toggle while transcribing reports busy', async () => {
     let resolveTranscription;
     const {deps, calls} = createDeps({

@@ -1,9 +1,21 @@
+import GLib from 'gi://GLib';
+
 import {normalizeSettings} from './settings.js';
 import {createSpeechDetector} from './speechDetector.js';
 
+const OPERATION_TIMEOUT_MS = 700;
+
 export class WhisperController {
     constructor(deps) {
-        this._deps = deps;
+        const {
+            operationTimeoutMs = OPERATION_TIMEOUT_MS,
+            ...runtimeDeps
+        } = deps;
+
+        this._deps = runtimeDeps;
+        this._operationTimeoutMs = Number.isFinite(operationTimeoutMs)
+            ? Math.max(50, operationTimeoutMs)
+            : OPERATION_TIMEOUT_MS;
 
         this._state = 'idle';
         this._session = null;
@@ -37,13 +49,12 @@ export class WhisperController {
 
         const session = this._session;
         this._deps.hideOverlay();
-
-        await session.levelMonitor.stop();
-        await session.recorder.stop();
-        await this._deps.cleanupRecording(session.path);
-
         this._state = 'idle';
         this._session = null;
+
+        await this._runBestEffort(() => session.levelMonitor.stop());
+        await this._runBestEffort(() => session.recorder.stop());
+        await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
     }
 
     async _startRecording() {
@@ -70,10 +81,12 @@ export class WhisperController {
             this._deps.showOverlay();
             this._state = 'recording';
         } catch (error) {
-            await recorder?.stop();
-            await this._deps.cleanupRecording(path);
             this._state = 'idle';
             this._session = null;
+
+            await this._runBestEffort(() => recorder?.stop?.());
+            await this._runBestEffort(() => this._deps.cleanupRecording(path), 1000);
+
             this._deps.notify(`Failed to start recording: ${error.message}`);
         }
     }
@@ -96,7 +109,7 @@ export class WhisperController {
 
             if (!session.speechDetector.hasSpeech()) {
                 this._deps.notify('No audio detected or no speech.');
-                await this._deps.playTone('error');
+                await this._runBestEffort(() => this._deps.playTone('error'));
                 return;
             }
 
@@ -110,14 +123,45 @@ export class WhisperController {
                 this._deps.notify('Transcription finished with empty text');
             }
 
-            await this._deps.playTone('success');
+            await this._runBestEffort(() => this._deps.playTone('success'));
         } catch (error) {
             this._deps.notify(`Transcription failed: ${error.message}`);
-            await this._deps.playTone('error');
+            await this._runBestEffort(() => this._deps.playTone('error'));
         } finally {
-            await this._deps.cleanupRecording(session.path);
             this._session = null;
             this._state = 'idle';
+
+            await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
+        }
+    }
+
+    async _runBestEffort(action, timeoutMs = this._operationTimeoutMs) {
+        try {
+            await this._runWithTimeout(action, timeoutMs);
+        } catch (_error) {
+            // Best effort operations (tone/cleanup) should not block state progress.
+        }
+    }
+
+    async _runWithTimeout(action, timeoutMs) {
+        let timeoutId = 0;
+
+        try {
+            const timeoutPromise = new Promise((_resolve, reject) => {
+                timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
+                    timeoutId = 0;
+                    reject(new Error('Operation timed out'));
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
+
+            return await Promise.race([
+                Promise.resolve().then(action),
+                timeoutPromise,
+            ]);
+        } finally {
+            if (timeoutId !== 0)
+                GLib.source_remove(timeoutId);
         }
     }
 }
