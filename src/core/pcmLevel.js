@@ -36,10 +36,10 @@ export function pcmS16Level(value) {
 
     const rms = Math.sqrt(sumSquares / frameCount);
     const adjustedRms = Math.max(0, rms - 0.0008);
-    const normalizedRms = Math.min(1, adjustedRms * 12);
-    const normalizedPeak = Math.min(1, Math.max(0, peak - 0.01) * 1.5);
-    const combined = Math.max(normalizedRms, normalizedPeak * 0.65);
-    const boosted = Math.pow(combined, 0.75);
+    const normalizedRms = Math.min(1, adjustedRms * 20);
+    const normalizedPeak = Math.min(1, Math.max(0, peak - 0.002) * 8);
+    const combined = Math.max(normalizedRms, normalizedPeak * 0.8);
+    const boosted = Math.pow(combined, 0.65);
 
     return Math.max(0, Math.min(1, boosted));
 }

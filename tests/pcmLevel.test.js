@@ -35,16 +35,16 @@ test('pcmS16Level detects moderate speech-like amplitude', () => {
     const bytes = samplesToBytes([1200, -1100, 1500, -1400, 800, -900]);
     const level = pcmS16Level(bytes);
 
-    assert(level > 0.25);
-    assert(level < 0.7);
+    assert(level > 0.6);
+    assert(level < 0.9);
 });
 
 test('pcmS16Level supports signed byte views', () => {
     const bytes = new Int8Array(samplesToBytes([1200, -1200]).buffer);
     const level = pcmS16Level(bytes);
 
-    assert(level > 0.1);
-    assert(level < 0.7);
+    assert(level > 0.6);
+    assert(level < 0.9);
 });
 
 test('pcmS16Level clamps loud samples to one', () => {
