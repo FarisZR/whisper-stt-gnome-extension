@@ -1,4 +1,5 @@
 import {normalizeSettings} from './settings.js';
+import {createSpeechDetector} from './speechDetector.js';
 
 export class WhisperController {
     constructor(deps) {
@@ -48,11 +49,13 @@ export class WhisperController {
     async _startRecording() {
         const settings = normalizeSettings(this._deps.getSettings());
         const path = this._deps.createRecordingPath();
+        const speechDetector = createSpeechDetector();
         let recorder = null;
 
         try {
             recorder = await this._deps.startRecording(path, settings);
             const levelMonitor = await this._deps.startLevelMonitor(level => {
+                speechDetector.pushLevel(level);
                 this._deps.updateOverlay(level);
             }, settings);
 
@@ -61,6 +64,7 @@ export class WhisperController {
                 settings,
                 recorder,
                 levelMonitor,
+                speechDetector,
             };
 
             this._deps.showOverlay();
@@ -89,6 +93,12 @@ export class WhisperController {
 
             await session.levelMonitor.stop();
             await session.recorder.stop();
+
+            if (!session.speechDetector.hasSpeech()) {
+                this._deps.notify('No audio detected or no speech.');
+                await this._deps.playTone('error');
+                return;
+            }
 
             const transcript = await this._deps.transcribeRecording(session.path, session.settings);
             const cleaned = typeof transcript === 'string' ? transcript.trim() : '';

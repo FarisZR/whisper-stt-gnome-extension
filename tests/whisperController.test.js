@@ -234,6 +234,31 @@ test('disable from idle is a no-op', async () => {
     assert(!calls.includes('hideOverlay'));
 });
 
+test('no detected speech skips transcription and notifies', async () => {
+    const {deps, calls} = createDeps({
+        async startLevelMonitor(onLevel) {
+            calls.push('startLevelMonitor');
+            for (let i = 0; i < 8; i += 1)
+                onLevel(0.02);
+
+            return {
+                async stop() {
+                    calls.push('level.stop');
+                },
+            };
+        },
+    });
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    await controller.toggle();
+
+    assertEqual(controller.state, 'idle');
+    assert(!calls.includes('transcribeRecording'));
+    assert(calls.some(c => c.startsWith('notify:No audio detected or no speech')));
+    assert(calls.includes('playTone:error'));
+});
+
 test('recording state with missing session resets to idle', async () => {
     const {deps} = createDeps();
     const controller = new WhisperController(deps);
