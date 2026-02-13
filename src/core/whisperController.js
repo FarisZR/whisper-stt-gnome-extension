@@ -4,6 +4,7 @@ import {normalizeSettings} from './settings.js';
 import {createSpeechDetector} from './speechDetector.js';
 
 const OPERATION_TIMEOUT_MS = 700;
+const TRANSCRIPTION_TIMEOUT_MS = 120000;
 
 export class WhisperController {
     constructor(deps) {
@@ -100,20 +101,24 @@ export class WhisperController {
         }
 
         this._state = 'transcribing';
+        let toneKind = 'success';
 
         try {
             this._deps.hideOverlay();
 
-            await session.levelMonitor.stop();
-            await session.recorder.stop();
+            await this._runBestEffort(() => session.levelMonitor.stop(), 1000);
+            await this._runBestEffort(() => session.recorder.stop(), 1000);
 
             if (!session.speechDetector.hasSpeech()) {
                 this._deps.notify('No audio detected or no speech.');
-                await this._runBestEffort(() => this._deps.playTone('error'));
+                toneKind = 'error';
                 return;
             }
 
-            const transcript = await this._deps.transcribeRecording(session.path, session.settings);
+            const transcript = await this._runWithTimeout(
+                () => this._deps.transcribeRecording(session.path, session.settings),
+                TRANSCRIPTION_TIMEOUT_MS
+            );
             const cleaned = typeof transcript === 'string' ? transcript.trim() : '';
 
             if (cleaned.length > 0) {
@@ -123,15 +128,15 @@ export class WhisperController {
                 this._deps.notify('Transcription finished with empty text');
             }
 
-            await this._runBestEffort(() => this._deps.playTone('success'));
         } catch (error) {
             this._deps.notify(`Transcription failed: ${error.message}`);
-            await this._runBestEffort(() => this._deps.playTone('error'));
+            toneKind = 'error';
         } finally {
             this._session = null;
             this._state = 'idle';
 
-            await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
+            void this._runBestEffort(() => this._deps.playTone(toneKind));
+            void this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
         }
     }
 

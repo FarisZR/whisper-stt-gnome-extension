@@ -201,6 +201,29 @@ test('hanging success tone does not keep controller transcribing', async () => {
     assert(calls.includes('playTone:success'));
 });
 
+test('hanging recorder stop does not keep controller transcribing', async () => {
+    const {deps, calls} = createDeps({
+        operationTimeoutMs: 30,
+        async startRecording(path) {
+            calls.push(`startRecording:${path}`);
+            return {
+                async stop() {
+                    calls.push('recording.stop');
+                    return await new Promise(() => {});
+                },
+            };
+        },
+    });
+
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    await controller.toggle();
+
+    assertEqual(controller.state, 'idle');
+    assert(calls.includes('copyToClipboard:hello world'));
+});
+
 test('invalid operation timeout falls back to default', () => {
     const {deps} = createDeps({
         operationTimeoutMs: Number.NaN,
@@ -226,7 +249,7 @@ test('toggle while transcribing reports busy', async () => {
     await controller.toggle();
     const pending = controller.toggle();
 
-    for (let i = 0; i < 5 && typeof resolveTranscription !== 'function'; i += 1)
+    for (let i = 0; i < 40 && typeof resolveTranscription !== 'function'; i += 1)
         await Promise.resolve();
 
     await controller.toggle();
