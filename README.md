@@ -4,6 +4,8 @@ A GNOME Shell extension that records microphone audio with a keyboard shortcut,
 sends it to an OpenAI-compatible speech-to-text endpoint, then plays a tone and
 copies the transcript to the clipboard.
 
+![settings](media/settings.png)
+
 ## Features
 
 - Toggle recording with one shortcut press (start/stop)
