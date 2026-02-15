@@ -55,11 +55,6 @@ async function _transcribeRecording(path, settings) {
 }
 
 async function _copyToClipboard(text) {
-    const result = await runCommand(['wl-copy'], text);
-
-    if (result.success)
-        return;
-
     St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
 }
 

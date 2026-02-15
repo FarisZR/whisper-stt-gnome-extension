@@ -10,7 +10,7 @@ copies the transcript to the clipboard.
 - Live voice graph overlay while recording
 - OpenAI-style `/v1/audio/transcriptions` request flow
 - Works with empty API key (no Authorization header sent)
-- Copies transcript to clipboard using `wl-copy`
+- Copies transcript to the GNOME clipboard
 
 ## Settings
 
