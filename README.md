@@ -6,6 +6,40 @@ copies the transcript to the clipboard.
 
 ![settings](media/settings.png)
 
+## Installation
+
+### Easy Install
+
+Run the included install script in the terminal:
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+Then restart GNOME Shell (Log out/in on Wayland, or Alt+F2 typed 'r' on X11) and enable the extension.
+
+### Manual Installation
+
+1. Create the extension directory:
+   ```bash
+   mkdir -p ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com
+   ```
+2. Copy the extension files:
+   ```bash
+   cp -r ./* ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com/
+   ```
+3. Compile the schemas:
+   ```bash
+   glib-compile-schemas ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com/schemas/
+   ```
+
+After installing, restart GNOME Shell and enable the extension:
+
+```bash
+gnome-extensions enable whisper-stt@fariszr.com
+```
+
 ## Features
 
 - Toggle recording with one shortcut press (start/stop)

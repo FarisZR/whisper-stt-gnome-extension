@@ -11,6 +11,11 @@ To test changes, the extension must be installed or symlinked to the local exten
 *   **UUID:** `whisper-stt@fariszr.com`
 *   **Local Path:** `~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com/`
 
+**Install/update (helper script):**
+```bash
+./install.sh
+```
+
 **Install/update (manual):**
 ```bash
 mkdir -p ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com/
