@@ -1,18 +1,11 @@
 import Adw from 'gi://Adw';
+import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.whisper-stt';
 
-function _addStringRow(group, settings, title, key, subtitle = '') {
-    const row = new Adw.EntryRow({
-        title,
-        text: settings.get_string(key),
-    });
-
-    if (subtitle)
-        row.set_tooltip_text(subtitle);
-
+function _addBoundRow(group, settings, key, row) {
     row.connect('changed', () => {
         settings.set_string(key, row.get_text());
     });
@@ -25,6 +18,29 @@ function _addStringRow(group, settings, title, key, subtitle = '') {
     });
 
     group.add(row);
+
+    return row;
+}
+
+function _addStringRow(group, settings, title, key, subtitle = '') {
+    const row = new Adw.EntryRow({
+        title,
+        text: settings.get_string(key),
+    });
+
+    if (subtitle)
+        row.set_tooltip_text(subtitle);
+
+    return _addBoundRow(group, settings, key, row);
+}
+
+function _addPasswordRow(group, settings, title, key) {
+    const row = new Adw.PasswordEntryRow({
+        title,
+        text: settings.get_string(key),
+    });
+
+    return _addBoundRow(group, settings, key, row);
 }
 
 export default class WhisperSttPreferences extends ExtensionPreferences {
@@ -50,6 +66,72 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         _addStringRow(apiGroup, settings, _('Language (optional)'), 'language', _('ISO code, e.g. en'));
         _addStringRow(apiGroup, settings, _('Prompt (optional)'), 'prompt');
         _addStringRow(apiGroup, settings, _('Response Format'), 'response-format', _('json or text'));
+
+        const proxyGroup = new Adw.PreferencesGroup({
+            title: _('Proxy'),
+        });
+        page.add(proxyGroup);
+
+        const proxyToggleRow = new Adw.SwitchRow({
+            title: _('Enable Proxy'),
+            subtitle: _('Use an HTTP or SOCKS5 proxy for transcription requests'),
+            active: settings.get_boolean('proxy-enabled'),
+        });
+        proxyGroup.add(proxyToggleRow);
+
+        const proxyTypeModel = Gtk.StringList.new([
+            _('SOCKS5'),
+            _('HTTP'),
+        ]);
+        const proxyTypeRow = new Adw.ComboRow({
+            title: _('Proxy Type'),
+            model: proxyTypeModel,
+            selected: settings.get_string('proxy-type') === 'http' ? 1 : 0,
+        });
+        proxyGroup.add(proxyTypeRow);
+
+        const proxyHostRow = _addStringRow(proxyGroup, settings, _('Proxy Host'), 'proxy-host', _('Example: 127.0.0.1'));
+        const proxyPortRow = _addStringRow(proxyGroup, settings, _('Proxy Port'), 'proxy-port', _('SOCKS default: 1080, Squid default: 3128'));
+        const proxyUsernameRow = _addStringRow(proxyGroup, settings, _('Proxy Username (optional)'), 'proxy-username');
+        const proxyPasswordRow = _addPasswordRow(proxyGroup, settings, _('Proxy Password (optional)'), 'proxy-password');
+
+        const updateProxyRowsVisibility = enabled => {
+            proxyTypeRow.set_visible(enabled);
+            proxyHostRow.set_visible(enabled);
+            proxyPortRow.set_visible(enabled);
+            proxyUsernameRow.set_visible(enabled);
+            proxyPasswordRow.set_visible(enabled);
+        };
+
+        proxyTypeRow.connect('notify::selected', () => {
+            const proxyType = proxyTypeRow.get_selected() === 1 ? 'http' : 'socks5';
+            settings.set_string('proxy-type', proxyType);
+        });
+
+        settings.connect('changed::proxy-type', () => {
+            const selected = settings.get_string('proxy-type') === 'http' ? 1 : 0;
+
+            if (proxyTypeRow.get_selected() !== selected)
+                proxyTypeRow.set_selected(selected);
+        });
+
+        proxyToggleRow.connect('notify::active', () => {
+            const enabled = proxyToggleRow.get_active();
+            updateProxyRowsVisibility(enabled);
+            settings.set_boolean('proxy-enabled', enabled);
+        });
+
+        settings.connect('changed::proxy-enabled', () => {
+            const enabled = settings.get_boolean('proxy-enabled');
+
+            if (proxyToggleRow.get_active() !== enabled)
+                proxyToggleRow.set_active(enabled);
+
+            updateProxyRowsVisibility(enabled);
+        });
+
+        const proxyEnabled = settings.get_boolean('proxy-enabled');
+        updateProxyRowsVisibility(proxyEnabled);
 
         const shortcutGroup = new Adw.PreferencesGroup({
             title: _('Shortcut'),

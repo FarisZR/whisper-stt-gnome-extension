@@ -43,6 +43,48 @@
         Response format sent to the endpoint. Typical values are json or text.
       </description>
     </key>
+    <key name="proxy-enabled" type="b">
+      <default>false</default>
+      <summary>Enable proxy</summary>
+      <description>
+        Enable HTTP or SOCKS5 proxy for transcription API requests.
+      </description>
+    </key>
+    <key name="proxy-type" type="s">
+      <default>'socks5'</default>
+      <summary>Proxy type</summary>
+      <description>
+        Proxy protocol. Supported values are socks5 and http.
+      </description>
+    </key>
+    <key name="proxy-host" type="s">
+      <default>''</default>
+      <summary>Proxy host</summary>
+      <description>
+        Hostname or IP address of the proxy server.
+      </description>
+    </key>
+    <key name="proxy-port" type="s">
+      <default>'1080'</default>
+      <summary>Proxy port</summary>
+      <description>
+        Port used by the proxy server.
+      </description>
+    </key>
+    <key name="proxy-username" type="s">
+      <default>''</default>
+      <summary>Proxy username</summary>
+      <description>
+        Optional username for proxy authentication.
+      </description>
+    </key>
+    <key name="proxy-password" type="s">
+      <default>''</default>
+      <summary>Proxy password</summary>
+      <description>
+        Optional password for proxy authentication.
+      </description>
+    </key>
     <key name="toggle-recording-shortcut" type="as">
       <default>['&lt;Ctrl&gt;&lt;Super&gt;space']</default>
       <summary>Shortcut for starting or stopping recording</summary>

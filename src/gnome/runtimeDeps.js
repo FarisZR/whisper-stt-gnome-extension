@@ -23,6 +23,12 @@ function _settingsToObject(settings) {
         language: settings.get_string('language'),
         prompt: settings.get_string('prompt'),
         responseFormat: settings.get_string('response-format'),
+        proxyEnabled: settings.get_boolean('proxy-enabled'),
+        proxyType: settings.get_string('proxy-type'),
+        proxyHost: settings.get_string('proxy-host'),
+        proxyPort: settings.get_string('proxy-port'),
+        proxyUsername: settings.get_string('proxy-username'),
+        proxyPassword: settings.get_string('proxy-password'),
         shortcut: settings.get_strv('toggle-recording-shortcut'),
     };
 }
