@@ -59,30 +59,30 @@
     </key>
     <key name="proxy-host" type="s">
       <default>''</default>
-      <summary>SOCKS5 proxy host</summary>
+      <summary>Proxy host</summary>
       <description>
-        Hostname or IP address of the SOCKS5 proxy server.
+        Hostname or IP address of the proxy server.
       </description>
     </key>
     <key name="proxy-port" type="s">
       <default>'1080'</default>
-      <summary>SOCKS5 proxy port</summary>
+      <summary>Proxy port</summary>
       <description>
-        Port used by the SOCKS5 proxy server.
+        Port used by the proxy server.
       </description>
     </key>
     <key name="proxy-username" type="s">
       <default>''</default>
-      <summary>SOCKS5 proxy username</summary>
+      <summary>Proxy username</summary>
       <description>
-        Optional username for SOCKS5 proxy authentication.
+        Optional username for proxy authentication.
       </description>
     </key>
     <key name="proxy-password" type="s">
       <default>''</default>
-      <summary>SOCKS5 proxy password</summary>
+      <summary>Proxy password</summary>
       <description>
-        Optional password for SOCKS5 proxy authentication.
+        Optional password for proxy authentication.
       </description>
     </key>
     <key name="toggle-recording-shortcut" type="as">

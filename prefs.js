@@ -30,6 +30,28 @@ function _addStringRow(group, settings, title, key, subtitle = '') {
     return row;
 }
 
+function _addPasswordRow(group, settings, title, key) {
+    const row = new Adw.PasswordEntryRow({
+        title,
+        text: settings.get_string(key),
+    });
+
+    row.connect('changed', () => {
+        settings.set_string(key, row.get_text());
+    });
+
+    settings.connect(`changed::${key}`, () => {
+        const latest = settings.get_string(key);
+
+        if (row.get_text() !== latest)
+            row.set_text(latest);
+    });
+
+    group.add(row);
+
+    return row;
+}
+
 export default class WhisperSttPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings(SETTINGS_SCHEMA);
@@ -80,7 +102,7 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         const proxyHostRow = _addStringRow(proxyGroup, settings, _('Proxy Host'), 'proxy-host', _('Example: 127.0.0.1'));
         const proxyPortRow = _addStringRow(proxyGroup, settings, _('Proxy Port'), 'proxy-port', _('SOCKS default: 1080, Squid default: 3128'));
         const proxyUsernameRow = _addStringRow(proxyGroup, settings, _('Proxy Username (optional)'), 'proxy-username');
-        const proxyPasswordRow = _addStringRow(proxyGroup, settings, _('Proxy Password (optional)'), 'proxy-password');
+        const proxyPasswordRow = _addPasswordRow(proxyGroup, settings, _('Proxy Password (optional)'), 'proxy-password');
 
         const updateProxyRowsVisibility = enabled => {
             proxyTypeRow.set_visible(enabled);

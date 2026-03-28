@@ -97,7 +97,9 @@ test('buildCurlArgs adds socks5h proxy with auth when username exists', () => {
     }, '/tmp/audio.wav');
 
     assert(args.includes('--proxy'));
-    assert(args.includes('socks5h://alice:secretpass@127.0.0.1:9050'));
+    assert(args.includes('socks5h://127.0.0.1:9050'));
+    assert(args.includes('--proxy-user'));
+    assert(args.includes('alice:secretpass'));
 });
 
 test('buildCurlArgs adds http proxy with auth when username exists', () => {
@@ -112,7 +114,9 @@ test('buildCurlArgs adds http proxy with auth when username exists', () => {
     }, '/tmp/audio.wav');
 
     assert(args.includes('--proxy'));
-    assert(args.includes('http://alice:secretpass@127.0.0.1:3128'));
+    assert(args.includes('http://127.0.0.1:3128'));
+    assert(args.includes('--proxy-user'));
+    assert(args.includes('alice:secretpass'));
 });
 
 test('buildCurlArgs ignores auth when username is blank', () => {
@@ -127,4 +131,21 @@ test('buildCurlArgs ignores auth when username is blank', () => {
 
     assert(args.includes('socks5h://127.0.0.1:9050'));
     assert(!args.some(arg => arg.includes('@127.0.0.1:9050')));
+});
+
+test('buildCurlArgs supports proxy auth with username only', () => {
+    const args = buildCurlArgs({
+        ...baseSettings,
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9050',
+        proxyUsername: 'alice',
+        proxyPassword: ' ',
+    }, '/tmp/audio.wav');
+
+    assert(args.includes('--proxy'));
+    assert(args.includes('socks5h://127.0.0.1:9050'));
+    assert(args.includes('--proxy-user'));
+    assert(args.includes('alice'));
+    assert(!args.includes('alice:'));
 });

@@ -5,26 +5,31 @@ function _pushForm(args, key, value) {
     args.push('--form', `${key}=${value}`);
 }
 
-function _buildProxyUrl(settings) {
+function _buildProxyOptions(settings) {
     if (settings.proxyEnabled !== true)
-        return '';
+        return null;
 
     if (typeof settings.proxyHost !== 'string' || settings.proxyHost.trim().length === 0)
-        return '';
+        return null;
 
     const host = settings.proxyHost.trim();
-    const port = typeof settings.proxyPort === 'string' && settings.proxyPort.trim().length > 0
-        ? settings.proxyPort.trim()
-        : '1080';
+    const port = String(settings.proxyPort ?? '').trim();
+    if (port.length === 0)
+        return null;
+
     const proxyType = settings.proxyType === 'http' ? 'http' : 'socks5';
     const username = typeof settings.proxyUsername === 'string' ? settings.proxyUsername.trim() : '';
     const password = typeof settings.proxyPassword === 'string' ? settings.proxyPassword.trim() : '';
     const protocol = proxyType === 'http' ? 'http' : 'socks5h';
+    const options = [
+        '--proxy',
+        `${protocol}://${host}:${port}`,
+    ];
 
-    if (username.length === 0)
-        return `${protocol}://${host}:${port}`;
+    if (username.length > 0)
+        options.push('--proxy-user', password.length > 0 ? `${username}:${password}` : username);
 
-    return `${protocol}://${username}:${password}@${host}:${port}`;
+    return options;
 }
 
 export function buildCurlArgs(settings, audioPath) {
@@ -50,10 +55,10 @@ export function buildCurlArgs(settings, audioPath) {
     if (typeof settings.apiKey === 'string' && settings.apiKey.trim().length > 0)
         args.push('--header', `Authorization: Bearer ${settings.apiKey.trim()}`);
 
-    const proxyUrl = _buildProxyUrl(settings);
+    const proxyOptions = _buildProxyOptions(settings);
 
-    if (proxyUrl)
-        args.push('--proxy', proxyUrl);
+    if (proxyOptions)
+        args.push(...proxyOptions);
 
     return args;
 }
