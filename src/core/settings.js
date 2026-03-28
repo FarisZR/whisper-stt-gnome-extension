@@ -2,6 +2,7 @@ const DEFAULT_ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
 const DEFAULT_MODEL = 'whisper-1';
 const DEFAULT_RESPONSE_FORMAT = 'json';
 const DEFAULT_SHORTCUT = ['<Ctrl><Super>space'];
+const DEFAULT_PROXY_PORT = '1080';
 
 function _asTrimmedString(value) {
     if (typeof value !== 'string')
@@ -28,6 +29,11 @@ export function normalizeSettings(raw = {}) {
     const language = _asTrimmedString(raw.language);
     const prompt = _asTrimmedString(raw.prompt);
     const responseFormat = _asTrimmedString(raw.responseFormat) || DEFAULT_RESPONSE_FORMAT;
+    const proxyEnabled = raw.proxyEnabled === true;
+    const proxyHost = _asTrimmedString(raw.proxyHost);
+    const proxyPort = _asTrimmedString(raw.proxyPort) || DEFAULT_PROXY_PORT;
+    const proxyUsername = _asTrimmedString(raw.proxyUsername);
+    const proxyPassword = _asTrimmedString(raw.proxyPassword);
     const shortcut = _normalizeShortcut(raw.shortcut);
 
     return {
@@ -37,6 +43,11 @@ export function normalizeSettings(raw = {}) {
         language,
         prompt,
         responseFormat,
+        proxyEnabled,
+        proxyHost,
+        proxyPort,
+        proxyUsername,
+        proxyPassword,
         shortcut,
     };
 }
@@ -48,5 +59,10 @@ export const SETTINGS_DEFAULTS = Object.freeze({
     language: '',
     prompt: '',
     responseFormat: DEFAULT_RESPONSE_FORMAT,
+    proxyEnabled: false,
+    proxyHost: '',
+    proxyPort: DEFAULT_PROXY_PORT,
+    proxyUsername: '',
+    proxyPassword: '',
     shortcut: [...DEFAULT_SHORTCUT],
 });

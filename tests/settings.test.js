@@ -9,6 +9,11 @@ test('normalizeSettings returns defaults', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        proxyEnabled: false,
+        proxyHost: '',
+        proxyPort: '1080',
+        proxyUsername: '',
+        proxyPassword: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });
@@ -21,6 +26,11 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         language: ' en ',
         prompt: '  say hi ',
         responseFormat: ' text ',
+        proxyEnabled: true,
+        proxyHost: ' 127.0.0.1 ',
+        proxyPort: ' 9050 ',
+        proxyUsername: ' user ',
+        proxyPassword: ' pass ',
         shortcut: [' <Alt>F8 '],
     }), {
         endpoint: 'https://example.com/v1/audio/transcriptions',
@@ -29,6 +39,11 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         language: 'en',
         prompt: 'say hi',
         responseFormat: 'text',
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9050',
+        proxyUsername: 'user',
+        proxyPassword: 'pass',
         shortcut: ['<Alt>F8'],
     });
 });
@@ -46,6 +61,11 @@ test('normalizeSettings falls back for blank endpoint/model/format', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        proxyEnabled: false,
+        proxyHost: '',
+        proxyPort: '1080',
+        proxyUsername: '',
+        proxyPassword: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });
@@ -58,6 +78,11 @@ test('normalizeSettings handles non-string values safely', () => {
         language: false,
         prompt: {},
         responseFormat: 0,
+        proxyEnabled: 'yes',
+        proxyHost: null,
+        proxyPort: 1080,
+        proxyUsername: undefined,
+        proxyPassword: {},
         shortcut: 'invalid',
     }), {
         endpoint: 'https://api.openai.com/v1/audio/transcriptions',
@@ -66,6 +91,11 @@ test('normalizeSettings handles non-string values safely', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        proxyEnabled: false,
+        proxyHost: '',
+        proxyPort: '1080',
+        proxyUsername: '',
+        proxyPassword: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });

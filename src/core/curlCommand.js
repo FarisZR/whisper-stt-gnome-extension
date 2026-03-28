@@ -5,6 +5,26 @@ function _pushForm(args, key, value) {
     args.push('--form', `${key}=${value}`);
 }
 
+function _buildProxyUrl(settings) {
+    if (settings.proxyEnabled !== true)
+        return '';
+
+    if (typeof settings.proxyHost !== 'string' || settings.proxyHost.trim().length === 0)
+        return '';
+
+    const host = settings.proxyHost.trim();
+    const port = typeof settings.proxyPort === 'string' && settings.proxyPort.trim().length > 0
+        ? settings.proxyPort.trim()
+        : '1080';
+    const username = typeof settings.proxyUsername === 'string' ? settings.proxyUsername.trim() : '';
+    const password = typeof settings.proxyPassword === 'string' ? settings.proxyPassword.trim() : '';
+
+    if (username.length === 0)
+        return `socks5h://${host}:${port}`;
+
+    return `socks5h://${username}:${password}@${host}:${port}`;
+}
+
 export function buildCurlArgs(settings, audioPath) {
     const args = [
         'curl',
@@ -27,6 +47,11 @@ export function buildCurlArgs(settings, audioPath) {
 
     if (typeof settings.apiKey === 'string' && settings.apiKey.trim().length > 0)
         args.push('--header', `Authorization: Bearer ${settings.apiKey.trim()}`);
+
+    const proxyUrl = _buildProxyUrl(settings);
+
+    if (proxyUrl)
+        args.push('--proxy', proxyUrl);
 
     return args;
 }

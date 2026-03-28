@@ -8,6 +8,11 @@ const baseSettings = {
     language: '',
     prompt: '',
     responseFormat: 'json',
+    proxyEnabled: false,
+    proxyHost: '',
+    proxyPort: '1080',
+    proxyUsername: '',
+    proxyPassword: '',
 };
 
 test('buildCurlArgs includes bearer header when api key exists', () => {
@@ -48,4 +53,49 @@ test('buildCurlArgs skips blank optional form fields', () => {
     assert(!args.some(arg => arg === 'language=  '));
     assert(!args.some(arg => arg.startsWith('prompt=')));
     assert(!args.some(arg => arg === 'response_format='));
+});
+
+test('buildCurlArgs omits proxy when proxy is disabled', () => {
+    const args = buildCurlArgs(baseSettings, '/tmp/audio.wav');
+    assert(!args.includes('--proxy'));
+});
+
+test('buildCurlArgs adds socks5h proxy without auth', () => {
+    const args = buildCurlArgs({
+        ...baseSettings,
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9050',
+    }, '/tmp/audio.wav');
+
+    assert(args.includes('--proxy'));
+    assert(args.includes('socks5h://127.0.0.1:9050'));
+});
+
+test('buildCurlArgs adds socks5h proxy with auth when username exists', () => {
+    const args = buildCurlArgs({
+        ...baseSettings,
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9050',
+        proxyUsername: 'alice',
+        proxyPassword: 'secretpass',
+    }, '/tmp/audio.wav');
+
+    assert(args.includes('--proxy'));
+    assert(args.includes('socks5h://alice:secretpass@127.0.0.1:9050'));
+});
+
+test('buildCurlArgs ignores auth when username is blank', () => {
+    const args = buildCurlArgs({
+        ...baseSettings,
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9050',
+        proxyUsername: ' ',
+        proxyPassword: 'secretpass',
+    }, '/tmp/audio.wav');
+
+    assert(args.includes('socks5h://127.0.0.1:9050'));
+    assert(!args.some(arg => arg.includes('@127.0.0.1:9050')));
 });
