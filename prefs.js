@@ -77,6 +77,19 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         });
         proxyGroup.add(proxyTypeRow);
 
+        const proxyHostRow = _addStringRow(proxyGroup, settings, _('Proxy Host'), 'proxy-host', _('Example: 127.0.0.1'));
+        const proxyPortRow = _addStringRow(proxyGroup, settings, _('Proxy Port'), 'proxy-port', _('SOCKS default: 1080, Squid default: 3128'));
+        const proxyUsernameRow = _addStringRow(proxyGroup, settings, _('Proxy Username (optional)'), 'proxy-username');
+        const proxyPasswordRow = _addStringRow(proxyGroup, settings, _('Proxy Password (optional)'), 'proxy-password');
+
+        const updateProxyRowsVisibility = enabled => {
+            proxyTypeRow.set_visible(enabled);
+            proxyHostRow.set_visible(enabled);
+            proxyPortRow.set_visible(enabled);
+            proxyUsernameRow.set_visible(enabled);
+            proxyPasswordRow.set_visible(enabled);
+        };
+
         proxyTypeRow.connect('notify::selected', () => {
             const proxyType = proxyTypeRow.get_selected() === 1 ? 'http' : 'socks5';
             settings.set_string('proxy-type', proxyType);
@@ -90,7 +103,9 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         });
 
         proxyToggleRow.connect('notify::active', () => {
-            settings.set_boolean('proxy-enabled', proxyToggleRow.get_active());
+            const enabled = proxyToggleRow.get_active();
+            updateProxyRowsVisibility(enabled);
+            settings.set_boolean('proxy-enabled', enabled);
         });
 
         settings.connect('changed::proxy-enabled', () => {
@@ -99,24 +114,11 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
             if (proxyToggleRow.get_active() !== enabled)
                 proxyToggleRow.set_active(enabled);
 
-            proxyHostRow.set_visible(enabled);
-            proxyPortRow.set_visible(enabled);
-            proxyUsernameRow.set_visible(enabled);
-            proxyPasswordRow.set_visible(enabled);
-            proxyTypeRow.set_visible(enabled);
+            updateProxyRowsVisibility(enabled);
         });
 
-        const proxyHostRow = _addStringRow(proxyGroup, settings, _('Proxy Host'), 'proxy-host', _('Example: 127.0.0.1'));
-        const proxyPortRow = _addStringRow(proxyGroup, settings, _('Proxy Port'), 'proxy-port', _('Default: 1080'));
-        const proxyUsernameRow = _addStringRow(proxyGroup, settings, _('Proxy Username (optional)'), 'proxy-username');
-        const proxyPasswordRow = _addStringRow(proxyGroup, settings, _('Proxy Password (optional)'), 'proxy-password');
-
         const proxyEnabled = settings.get_boolean('proxy-enabled');
-        proxyHostRow.set_visible(proxyEnabled);
-        proxyPortRow.set_visible(proxyEnabled);
-        proxyUsernameRow.set_visible(proxyEnabled);
-        proxyPasswordRow.set_visible(proxyEnabled);
-        proxyTypeRow.set_visible(proxyEnabled);
+        updateProxyRowsVisibility(proxyEnabled);
 
         const shortcutGroup = new Adw.PreferencesGroup({
             title: _('Shortcut'),
