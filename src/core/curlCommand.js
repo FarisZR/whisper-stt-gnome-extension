@@ -13,9 +13,9 @@ function _buildProxyOptions(settings) {
         return null;
 
     const host = settings.proxyHost.trim();
-    const port = String(settings.proxyPort ?? '').trim();
-    if (port.length === 0)
-        return null;
+    const port = typeof settings.proxyPort === 'string' && settings.proxyPort.trim().length > 0
+        ? settings.proxyPort.trim()
+        : '1080';
 
     const proxyType = settings.proxyType === 'http' ? 'http' : 'socks5';
     const username = typeof settings.proxyUsername === 'string' ? settings.proxyUsername.trim() : '';

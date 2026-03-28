@@ -140,7 +140,7 @@ test('buildCurlArgs supports proxy auth with username only', () => {
         proxyHost: '127.0.0.1',
         proxyPort: '9050',
         proxyUsername: 'alice',
-        proxyPassword: ' ',
+        proxyPassword: '',
     }, '/tmp/audio.wav');
 
     assert(args.includes('--proxy'));

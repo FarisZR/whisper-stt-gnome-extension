@@ -5,15 +5,7 @@ import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Ex
 
 const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.whisper-stt';
 
-function _addStringRow(group, settings, title, key, subtitle = '') {
-    const row = new Adw.EntryRow({
-        title,
-        text: settings.get_string(key),
-    });
-
-    if (subtitle)
-        row.set_tooltip_text(subtitle);
-
+function _addBoundRow(group, settings, key, row) {
     row.connect('changed', () => {
         settings.set_string(key, row.get_text());
     });
@@ -30,26 +22,25 @@ function _addStringRow(group, settings, title, key, subtitle = '') {
     return row;
 }
 
+function _addStringRow(group, settings, title, key, subtitle = '') {
+    const row = new Adw.EntryRow({
+        title,
+        text: settings.get_string(key),
+    });
+
+    if (subtitle)
+        row.set_tooltip_text(subtitle);
+
+    return _addBoundRow(group, settings, key, row);
+}
+
 function _addPasswordRow(group, settings, title, key) {
     const row = new Adw.PasswordEntryRow({
         title,
         text: settings.get_string(key),
     });
 
-    row.connect('changed', () => {
-        settings.set_string(key, row.get_text());
-    });
-
-    settings.connect(`changed::${key}`, () => {
-        const latest = settings.get_string(key);
-
-        if (row.get_text() !== latest)
-            row.set_text(latest);
-    });
-
-    group.add(row);
-
-    return row;
+    return _addBoundRow(group, settings, key, row);
 }
 
 export default class WhisperSttPreferences extends ExtensionPreferences {
