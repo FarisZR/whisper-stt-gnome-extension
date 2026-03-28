@@ -24,6 +24,7 @@ function _settingsToObject(settings) {
         prompt: settings.get_string('prompt'),
         responseFormat: settings.get_string('response-format'),
         proxyEnabled: settings.get_boolean('proxy-enabled'),
+        proxyType: settings.get_string('proxy-type'),
         proxyHost: settings.get_string('proxy-host'),
         proxyPort: settings.get_string('proxy-port'),
         proxyUsername: settings.get_string('proxy-username'),

@@ -1,4 +1,5 @@
 import Adw from 'gi://Adw';
+import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -54,16 +55,39 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         _addStringRow(apiGroup, settings, _('Response Format'), 'response-format', _('json or text'));
 
         const proxyGroup = new Adw.PreferencesGroup({
-            title: _('SOCKS5 Proxy'),
+            title: _('Proxy'),
         });
         page.add(proxyGroup);
 
         const proxyToggleRow = new Adw.SwitchRow({
-            title: _('Enable SOCKS5 Proxy'),
-            subtitle: _('Use a SOCKS5 proxy for transcription requests'),
+            title: _('Enable Proxy'),
+            subtitle: _('Use an HTTP or SOCKS5 proxy for transcription requests'),
             active: settings.get_boolean('proxy-enabled'),
         });
         proxyGroup.add(proxyToggleRow);
+
+        const proxyTypeModel = Gtk.StringList.new([
+            _('SOCKS5'),
+            _('HTTP'),
+        ]);
+        const proxyTypeRow = new Adw.ComboRow({
+            title: _('Proxy Type'),
+            model: proxyTypeModel,
+            selected: settings.get_string('proxy-type') === 'http' ? 1 : 0,
+        });
+        proxyGroup.add(proxyTypeRow);
+
+        proxyTypeRow.connect('notify::selected', () => {
+            const proxyType = proxyTypeRow.get_selected() === 1 ? 'http' : 'socks5';
+            settings.set_string('proxy-type', proxyType);
+        });
+
+        settings.connect('changed::proxy-type', () => {
+            const selected = settings.get_string('proxy-type') === 'http' ? 1 : 0;
+
+            if (proxyTypeRow.get_selected() !== selected)
+                proxyTypeRow.set_selected(selected);
+        });
 
         proxyToggleRow.connect('notify::active', () => {
             settings.set_boolean('proxy-enabled', proxyToggleRow.get_active());
@@ -79,6 +103,7 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
             proxyPortRow.set_visible(enabled);
             proxyUsernameRow.set_visible(enabled);
             proxyPasswordRow.set_visible(enabled);
+            proxyTypeRow.set_visible(enabled);
         });
 
         const proxyHostRow = _addStringRow(proxyGroup, settings, _('Proxy Host'), 'proxy-host', _('Example: 127.0.0.1'));
@@ -91,6 +116,7 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         proxyPortRow.set_visible(proxyEnabled);
         proxyUsernameRow.set_visible(proxyEnabled);
         proxyPasswordRow.set_visible(proxyEnabled);
+        proxyTypeRow.set_visible(proxyEnabled);
 
         const shortcutGroup = new Adw.PreferencesGroup({
             title: _('Shortcut'),

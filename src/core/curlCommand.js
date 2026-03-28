@@ -16,13 +16,15 @@ function _buildProxyUrl(settings) {
     const port = typeof settings.proxyPort === 'string' && settings.proxyPort.trim().length > 0
         ? settings.proxyPort.trim()
         : '1080';
+    const proxyType = settings.proxyType === 'http' ? 'http' : 'socks5';
     const username = typeof settings.proxyUsername === 'string' ? settings.proxyUsername.trim() : '';
     const password = typeof settings.proxyPassword === 'string' ? settings.proxyPassword.trim() : '';
+    const protocol = proxyType === 'http' ? 'http' : 'socks5h';
 
     if (username.length === 0)
-        return `socks5h://${host}:${port}`;
+        return `${protocol}://${host}:${port}`;
 
-    return `socks5h://${username}:${password}@${host}:${port}`;
+    return `${protocol}://${username}:${password}@${host}:${port}`;
 }
 
 export function buildCurlArgs(settings, audioPath) {

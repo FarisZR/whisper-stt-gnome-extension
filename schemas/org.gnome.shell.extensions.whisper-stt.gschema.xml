@@ -45,9 +45,16 @@
     </key>
     <key name="proxy-enabled" type="b">
       <default>false</default>
-      <summary>Enable SOCKS5 proxy</summary>
+      <summary>Enable proxy</summary>
       <description>
-        Enable SOCKS5 proxy for transcription API requests.
+        Enable HTTP or SOCKS5 proxy for transcription API requests.
+      </description>
+    </key>
+    <key name="proxy-type" type="s">
+      <default>'socks5'</default>
+      <summary>Proxy type</summary>
+      <description>
+        Proxy protocol. Supported values are socks5 and http.
       </description>
     </key>
     <key name="proxy-host" type="s">
