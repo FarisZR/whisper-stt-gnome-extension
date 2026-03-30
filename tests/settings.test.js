@@ -15,6 +15,8 @@ test('normalizeSettings returns defaults', () => {
         proxyPort: '1080',
         proxyUsername: '',
         proxyPassword: '',
+        bypassVpnEnabled: false,
+        bypassVpnInterface: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });
@@ -33,6 +35,8 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         proxyPort: ' 9050 ',
         proxyUsername: ' user ',
         proxyPassword: ' pass ',
+        bypassVpnEnabled: true,
+        bypassVpnInterface: ' enp6s0 ',
         shortcut: [' <Alt>F8 '],
     }), {
         endpoint: 'https://example.com/v1/audio/transcriptions',
@@ -47,6 +51,8 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         proxyPort: '9050',
         proxyUsername: 'user',
         proxyPassword: 'pass',
+        bypassVpnEnabled: true,
+        bypassVpnInterface: 'enp6s0',
         shortcut: ['<Alt>F8'],
     });
 });
@@ -70,6 +76,8 @@ test('normalizeSettings falls back for blank endpoint/model/format', () => {
         proxyPort: '1080',
         proxyUsername: '',
         proxyPassword: '',
+        bypassVpnEnabled: false,
+        bypassVpnInterface: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });
@@ -88,6 +96,8 @@ test('normalizeSettings handles non-string values safely', () => {
         proxyPort: 1080,
         proxyUsername: undefined,
         proxyPassword: {},
+        bypassVpnEnabled: 'yes',
+        bypassVpnInterface: null,
         shortcut: 'invalid',
     }), {
         endpoint: 'https://api.openai.com/v1/audio/transcriptions',
@@ -102,6 +112,8 @@ test('normalizeSettings handles non-string values safely', () => {
         proxyPort: '1080',
         proxyUsername: '',
         proxyPassword: '',
+        bypassVpnEnabled: false,
+        bypassVpnInterface: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });
@@ -124,6 +136,8 @@ test('normalizeSettings falls back to socks5 for unknown proxy type', () => {
         proxyPort: '1080',
         proxyUsername: '',
         proxyPassword: '',
+        bypassVpnEnabled: false,
+        bypassVpnInterface: '',
         shortcut: ['<Ctrl><Super>space'],
     });
 });

@@ -29,6 +29,8 @@ function _settingsToObject(settings) {
         proxyPort: settings.get_string('proxy-port'),
         proxyUsername: settings.get_string('proxy-username'),
         proxyPassword: settings.get_string('proxy-password'),
+        bypassVpnEnabled: settings.get_boolean('bypass-vpn-enabled'),
+        bypassVpnInterface: settings.get_string('bypass-vpn-interface'),
         shortcut: settings.get_strv('toggle-recording-shortcut'),
     };
 }
