@@ -48,6 +48,12 @@ export function buildCurlArgs(settings, audioPath) {
         `model=${settings.model}`,
     ];
 
+    if (settings.bypassVpnEnabled === true &&
+        typeof settings.bypassVpnInterface === 'string' &&
+        settings.bypassVpnInterface.trim().length > 0) {
+        args.push('--ipv4', '--interface', settings.bypassVpnInterface.trim());
+    }
+
     _pushForm(args, 'response_format', settings.responseFormat);
     _pushForm(args, 'language', settings.language);
     _pushForm(args, 'prompt', settings.prompt);

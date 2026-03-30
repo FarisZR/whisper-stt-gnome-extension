@@ -41,6 +41,8 @@ export function normalizeSettings(raw = {}) {
     const proxyPort = _asTrimmedString(raw.proxyPort) || DEFAULT_PROXY_PORT;
     const proxyUsername = _asTrimmedString(raw.proxyUsername);
     const proxyPassword = _asTrimmedString(raw.proxyPassword);
+    const bypassVpnEnabled = raw.bypassVpnEnabled === true;
+    const bypassVpnInterface = _asTrimmedString(raw.bypassVpnInterface);
     const shortcut = _normalizeShortcut(raw.shortcut);
 
     return {
@@ -56,6 +58,8 @@ export function normalizeSettings(raw = {}) {
         proxyPort,
         proxyUsername,
         proxyPassword,
+        bypassVpnEnabled,
+        bypassVpnInterface,
         shortcut,
     };
 }
@@ -73,5 +77,7 @@ export const SETTINGS_DEFAULTS = Object.freeze({
     proxyPort: DEFAULT_PROXY_PORT,
     proxyUsername: '',
     proxyPassword: '',
+    bypassVpnEnabled: false,
+    bypassVpnInterface: '',
     shortcut: [...DEFAULT_SHORTCUT],
 });

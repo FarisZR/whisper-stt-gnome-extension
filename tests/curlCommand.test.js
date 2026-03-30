@@ -14,6 +14,8 @@ const baseSettings = {
     proxyPort: '1080',
     proxyUsername: '',
     proxyPassword: '',
+    bypassVpnEnabled: false,
+    bypassVpnInterface: '',
 };
 
 test('buildCurlArgs includes bearer header when api key exists', () => {
@@ -131,6 +133,29 @@ test('buildCurlArgs ignores auth when username is blank', () => {
 
     assert(args.includes('socks5h://127.0.0.1:9050'));
     assert(!args.some(arg => arg.includes('@127.0.0.1:9050')));
+});
+
+test('buildCurlArgs adds interface binding when bypass vpn is enabled', () => {
+    const args = buildCurlArgs({
+        ...baseSettings,
+        bypassVpnEnabled: true,
+        bypassVpnInterface: 'enp6s0',
+    }, '/tmp/audio.wav');
+
+    assert(args.includes('--ipv4'));
+    assert(args.includes('--interface'));
+    assert(args.includes('enp6s0'));
+});
+
+test('buildCurlArgs skips interface binding when bypass vpn interface is blank', () => {
+    const args = buildCurlArgs({
+        ...baseSettings,
+        bypassVpnEnabled: true,
+        bypassVpnInterface: '  ',
+    }, '/tmp/audio.wav');
+
+    assert(!args.includes('--interface'));
+    assert(!args.includes('--ipv4'));
 });
 
 test('buildCurlArgs supports proxy auth with username only', () => {

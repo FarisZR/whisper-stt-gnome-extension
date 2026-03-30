@@ -133,6 +133,47 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         const proxyEnabled = settings.get_boolean('proxy-enabled');
         updateProxyRowsVisibility(proxyEnabled);
 
+        const bypassGroup = new Adw.PreferencesGroup({
+            title: _('VPN Bypass'),
+        });
+        page.add(bypassGroup);
+
+        const bypassToggleRow = new Adw.SwitchRow({
+            title: _('Bypass VPN connections'),
+            subtitle: _('Sends transcription requests through the selected local interface instead of the VPN tunnel'),
+            active: settings.get_boolean('bypass-vpn-enabled'),
+        });
+        bypassGroup.add(bypassToggleRow);
+
+        const bypassInterfaceRow = _addStringRow(
+            bypassGroup,
+            settings,
+            _('Network Interface'),
+            'bypass-vpn-interface',
+            _('Example: enp6s0 or wlan0')
+        );
+
+        const updateBypassRowsVisibility = enabled => {
+            bypassInterfaceRow.set_visible(enabled);
+        };
+
+        bypassToggleRow.connect('notify::active', () => {
+            const enabled = bypassToggleRow.get_active();
+            updateBypassRowsVisibility(enabled);
+            settings.set_boolean('bypass-vpn-enabled', enabled);
+        });
+
+        settings.connect('changed::bypass-vpn-enabled', () => {
+            const enabled = settings.get_boolean('bypass-vpn-enabled');
+
+            if (bypassToggleRow.get_active() !== enabled)
+                bypassToggleRow.set_active(enabled);
+
+            updateBypassRowsVisibility(enabled);
+        });
+
+        updateBypassRowsVisibility(settings.get_boolean('bypass-vpn-enabled'));
+
         const shortcutGroup = new Adw.PreferencesGroup({
             title: _('Shortcut'),
         });

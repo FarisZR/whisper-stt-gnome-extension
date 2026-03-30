@@ -57,7 +57,23 @@ Open extension preferences and configure:
 - `API Key` (optional)
 - `Language` and `Prompt` (optional)
 - `Response Format` (`json` or `text`)
+- `Bypass VPN connections` (optional, binds requests to a local interface like `enp6s0`)
 - Toggle shortcut accelerator string
+
+### Bypass VPN for this extension
+
+If your transcription host blocks VPN egress, enable `Bypass VPN connections` in preferences and set your local interface name (for example `enp6s0` or `wlan0`).
+
+This only affects this extension's transcription request and keeps your system VPN active for other traffic.
+
+How it works:
+
+1. The extension sends transcription requests with `curl`.
+2. When bypass is enabled, it adds `--interface <name>` so the request uses the selected NIC.
+3. It also adds `--ipv4` to avoid IPv6 tunnel or leak-protection routing edge cases.
+4. Recording, UI, clipboard, and other system traffic are unchanged.
+
+If requests time out, your VPN kill switch may be blocking non-tunnel traffic.
 
 ## Development
 

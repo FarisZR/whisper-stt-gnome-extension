@@ -85,6 +85,21 @@
         Optional password for proxy authentication.
       </description>
     </key>
+    <key name="bypass-vpn-enabled" type="b">
+      <default>false</default>
+      <summary>Bypass VPN for transcription requests</summary>
+      <description>
+        Bind transcription API requests to a specific local network interface.
+        This affects only this extension request flow.
+      </description>
+    </key>
+    <key name="bypass-vpn-interface" type="s">
+      <default>''</default>
+      <summary>Bypass VPN interface name</summary>
+      <description>
+        Interface name used for bypass requests, such as enp6s0 or wlan0.
+      </description>
+    </key>
     <key name="toggle-recording-shortcut" type="as">
       <default>['&lt;Ctrl&gt;&lt;Super&gt;space']</default>
       <summary>Shortcut for starting or stopping recording</summary>
