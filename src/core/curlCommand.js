@@ -51,7 +51,7 @@ export function buildCurlArgs(settings, audioPath) {
     if (settings.bypassVpnEnabled === true &&
         typeof settings.bypassVpnInterface === 'string' &&
         settings.bypassVpnInterface.trim().length > 0) {
-        args.push('--ipv4', '--interface', settings.bypassVpnInterface.trim());
+        args.push('--interface', settings.bypassVpnInterface.trim());
     }
 
     _pushForm(args, 'response_format', settings.responseFormat);

@@ -142,7 +142,6 @@ test('buildCurlArgs adds interface binding when bypass vpn is enabled', () => {
         bypassVpnInterface: 'enp6s0',
     }, '/tmp/audio.wav');
 
-    assert(args.includes('--ipv4'));
     assert(args.includes('--interface'));
     assert(args.includes('enp6s0'));
 });
@@ -155,7 +154,6 @@ test('buildCurlArgs skips interface binding when bypass vpn interface is blank',
     }, '/tmp/audio.wav');
 
     assert(!args.includes('--interface'));
-    assert(!args.includes('--ipv4'));
 });
 
 test('buildCurlArgs supports proxy auth with username only', () => {
