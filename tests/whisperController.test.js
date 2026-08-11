@@ -214,7 +214,7 @@ test('hanging success tone does not keep controller transcribing', async () => {
 
 test('hanging recorder stop does not keep controller transcribing', async () => {
     const {deps, calls} = createDeps({
-        operationTimeoutMs: 30,
+        recorderStopTimeoutMs: 30,
         async startRecording(path) {
             calls.push(`startRecording:${path}`);
             return {
@@ -260,6 +260,7 @@ test('hanging clipboard copy times out and allows next recording', async () => {
 test('invalid operation timeout falls back to default', () => {
     const {deps} = createDeps({
         operationTimeoutMs: Number.NaN,
+        recorderStopTimeoutMs: Number.NaN,
         transcriptionTimeoutMs: Number.NaN,
         clipboardTimeoutMs: Number.NaN,
         transcribingWatchdogMs: Number.NaN,
@@ -267,6 +268,7 @@ test('invalid operation timeout falls back to default', () => {
 
     const controller = new WhisperController(deps);
     assertEqual(controller._operationTimeoutMs, 700);
+    assertEqual(controller._recorderStopTimeoutMs, 2500);
     assertEqual(controller._transcriptionTimeoutMs, 120000);
     assertEqual(controller._clipboardTimeoutMs, 2500);
     assertEqual(controller._transcribingWatchdogMs, 150000);

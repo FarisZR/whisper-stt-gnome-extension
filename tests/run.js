@@ -1,5 +1,7 @@
 import './settings.test.js';
+import './metadata.test.js';
 import './pipelineCommand.test.js';
+import './process.test.js';
 import './levelParser.test.js';
 import './pcmLevel.test.js';
 import './speechDetector.test.js';

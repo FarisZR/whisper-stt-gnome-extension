@@ -4,6 +4,8 @@ A GNOME Shell extension that records microphone audio with a keyboard shortcut,
 sends it to an OpenAI-compatible speech-to-text endpoint, then plays a tone and
 copies the transcript to the clipboard.
 
+Supported GNOME Shell versions: 49 and 50.
+
 ![settings](media/settings.png)
 
 ## Installation
@@ -81,6 +83,14 @@ Run tests:
 ```bash
 ./scripts/test.sh
 ```
+
+Build an installable GNOME Shell extension bundle:
+
+```bash
+./scripts/package.sh
+```
+
+The package helper includes the `src/` module tree required by `extension.js`.
 
 Run tests with coverage output:
 

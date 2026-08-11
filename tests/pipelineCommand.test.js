@@ -1,10 +1,11 @@
 import {test, assert, assertDeepEqual, assertEqual} from './harness.js';
 import {buildRecordingCommand} from '../src/core/pipelineCommand.js';
 
-test('buildRecordingCommand creates a gst-launch argv list', () => {
+test('buildRecordingCommand creates a gst-launch argv list', async () => {
     const argv = buildRecordingCommand('/tmp/sample.wav');
 
     assertEqual(argv[0], 'gst-launch-1.0');
+    assert(argv.includes('-e'));
     assert(argv.includes('pulsesrc'));
     assert(argv.includes('level'));
     assert(argv.includes('wavenc'));
@@ -12,9 +13,10 @@ test('buildRecordingCommand creates a gst-launch argv list', () => {
     assert(argv.includes('location=/tmp/sample.wav'));
 });
 
-test('buildRecordingCommand keeps dynamic parts stable', () => {
-    assertDeepEqual(buildRecordingCommand('/x.wav').slice(0, 8), [
+test('buildRecordingCommand keeps dynamic parts stable', async () => {
+    assertDeepEqual(buildRecordingCommand('/x.wav').slice(0, 9), [
         'gst-launch-1.0',
+        '-e',
         '-m',
         'pulsesrc',
         '!',

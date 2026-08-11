@@ -4,6 +4,7 @@ import {normalizeSettings} from './settings.js';
 import {createSpeechDetector} from './speechDetector.js';
 
 const OPERATION_TIMEOUT_MS = 700;
+const RECORDER_STOP_TIMEOUT_MS = 2500;
 const TRANSCRIPTION_TIMEOUT_MS = 120000;
 const CLIPBOARD_TIMEOUT_MS = 2500;
 const TRANSCRIBING_WATCHDOG_MS = 150000;
@@ -12,6 +13,7 @@ export class WhisperController {
     constructor(deps) {
         const {
             operationTimeoutMs = OPERATION_TIMEOUT_MS,
+            recorderStopTimeoutMs = RECORDER_STOP_TIMEOUT_MS,
             transcriptionTimeoutMs = TRANSCRIPTION_TIMEOUT_MS,
             clipboardTimeoutMs = CLIPBOARD_TIMEOUT_MS,
             transcribingWatchdogMs = TRANSCRIBING_WATCHDOG_MS,
@@ -22,6 +24,9 @@ export class WhisperController {
         this._operationTimeoutMs = Number.isFinite(operationTimeoutMs)
             ? Math.max(50, operationTimeoutMs)
             : OPERATION_TIMEOUT_MS;
+        this._recorderStopTimeoutMs = Number.isFinite(recorderStopTimeoutMs)
+            ? Math.max(100, recorderStopTimeoutMs)
+            : RECORDER_STOP_TIMEOUT_MS;
         this._transcriptionTimeoutMs = Number.isFinite(transcriptionTimeoutMs)
             ? Math.max(100, transcriptionTimeoutMs)
             : TRANSCRIPTION_TIMEOUT_MS;
@@ -85,7 +90,7 @@ export class WhisperController {
         this._session = null;
 
         await this._runBestEffort(() => session.levelMonitor.stop());
-        await this._runBestEffort(() => session.recorder.stop());
+        await this._runBestEffort(() => session.recorder.stop(), this._recorderStopTimeoutMs);
         await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
     }
 
@@ -116,7 +121,7 @@ export class WhisperController {
             this._state = 'idle';
             this._session = null;
 
-            await this._runBestEffort(() => recorder?.stop?.());
+            await this._runBestEffort(() => recorder?.stop?.(), this._recorderStopTimeoutMs);
             await this._runBestEffort(() => this._deps.cleanupRecording(path), 1000);
 
             this._deps.notify(`Failed to start recording: ${error.message}`);
@@ -139,7 +144,7 @@ export class WhisperController {
             this._deps.hideOverlay();
 
             await this._runBestEffort(() => session.levelMonitor.stop(), 1000);
-            await this._runBestEffort(() => session.recorder.stop(), 1000);
+            await this._runBestEffort(() => session.recorder.stop(), this._recorderStopTimeoutMs);
 
             if (!session.speechDetector.hasSpeech()) {
                 this._deps.notify('No audio detected or no speech.');

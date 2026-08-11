@@ -6,6 +6,8 @@ Gio._promisify(Gio.Subprocess.prototype, 'wait_async');
 Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async', 'read_line_finish_utf8');
 Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async', 'read_bytes_finish');
 
+const PROCESS_STOP_TIMEOUT_MS = 2000;
+
 function _sleep(milliseconds) {
     return new Promise(resolve => {
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, milliseconds, () => {
@@ -56,21 +58,66 @@ async function _drainBytes(stream, onChunk, cancellable) {
 async function _stopProcess(process, cancellable) {
     cancellable.cancel();
 
-    if (!process.get_if_exited()) {
+    let shutdownError = null;
+    let waitPromise = null;
+    let waitFailed = false;
+
+    try {
+        process.send_signal(2);
+    } catch (error) {
+        console.error('[whisper-stt] Failed to send SIGINT to subprocess:', error);
+        shutdownError = error;
+    }
+
+    let exited = false;
+
+    if (!shutdownError) {
+        waitPromise = (async () => {
+            await process.wait_async(null);
+            return true;
+        })();
+
+        const timeoutPromise = (async () => {
+            await _sleep(PROCESS_STOP_TIMEOUT_MS);
+            return false;
+        })();
+
         try {
-            process.send_signal(2);
-        } catch (_error) {
-            process.force_exit();
+            exited = await Promise.race([waitPromise, timeoutPromise]);
+        } catch (error) {
+            console.error('[whisper-stt] Failed while waiting for subprocess shutdown:', error);
+            shutdownError = error;
+            waitFailed = true;
         }
     }
 
-    const waitPromise = process.wait_async(null);
-    await Promise.race([waitPromise, _sleep(700)]);
+    if (exited)
+        return;
 
-    if (!process.get_if_exited()) {
+    let cleanupError = null;
+
+    try {
         process.force_exit();
-        await process.wait_async(null);
+    } catch (error) {
+        console.error('[whisper-stt] Failed to force-exit subprocess:', error);
+        cleanupError = error;
     }
+
+    try {
+        if (waitPromise && !waitFailed)
+            await waitPromise;
+        else
+            await process.wait_async(null);
+    } catch (error) {
+        console.error('[whisper-stt] Failed while waiting for forced subprocess shutdown:', error);
+        cleanupError ??= error;
+    }
+
+    if (shutdownError)
+        throw shutdownError;
+
+    if (cleanupError)
+        throw cleanupError;
 }
 
 export async function runCommand(argv, input = null) {
