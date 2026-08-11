@@ -212,7 +212,7 @@ test('hanging success tone does not keep controller transcribing', async () => {
     assert(calls.includes('playTone:success'));
 });
 
-test('hanging recorder stop does not keep controller transcribing', async () => {
+test('hanging recorder stop aborts transcription instead of uploading partial audio', async () => {
     const {deps, calls} = createDeps({
         recorderStopTimeoutMs: 30,
         async startRecording(path) {
@@ -230,9 +230,13 @@ test('hanging recorder stop does not keep controller transcribing', async () => 
 
     await controller.toggle();
     await controller.toggle();
+    await Promise.resolve();
 
     assertEqual(controller.state, 'idle');
-    assert(calls.includes('copyToClipboard:hello world'));
+    assert(!calls.includes('transcribeRecording'));
+    assert(!calls.includes('copyToClipboard:hello world'));
+    assert(calls.some(c => c.startsWith('notify:Recording failed to finalize: Operation timed out')));
+    assert(calls.includes('playTone:error'));
 });
 
 test('hanging clipboard copy times out and allows next recording', async () => {
@@ -257,7 +261,7 @@ test('hanging clipboard copy times out and allows next recording', async () => {
     assertEqual(startCalls.length, 2);
 });
 
-test('invalid operation timeout falls back to default', () => {
+test('invalid operation timeout falls back to default', async () => {
     const {deps} = createDeps({
         operationTimeoutMs: Number.NaN,
         recorderStopTimeoutMs: Number.NaN,
@@ -268,7 +272,7 @@ test('invalid operation timeout falls back to default', () => {
 
     const controller = new WhisperController(deps);
     assertEqual(controller._operationTimeoutMs, 700);
-    assertEqual(controller._recorderStopTimeoutMs, 2500);
+    assertEqual(controller._recorderStopTimeoutMs, 12000);
     assertEqual(controller._transcriptionTimeoutMs, 120000);
     assertEqual(controller._clipboardTimeoutMs, 2500);
     assertEqual(controller._transcribingWatchdogMs, 150000);

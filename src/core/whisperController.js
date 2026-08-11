@@ -4,7 +4,7 @@ import {normalizeSettings} from './settings.js';
 import {createSpeechDetector} from './speechDetector.js';
 
 const OPERATION_TIMEOUT_MS = 700;
-const RECORDER_STOP_TIMEOUT_MS = 2500;
+const RECORDER_STOP_TIMEOUT_MS = 12000;
 const TRANSCRIPTION_TIMEOUT_MS = 120000;
 const CLIPBOARD_TIMEOUT_MS = 2500;
 const TRANSCRIBING_WATCHDOG_MS = 150000;
@@ -144,7 +144,17 @@ export class WhisperController {
             this._deps.hideOverlay();
 
             await this._runBestEffort(() => session.levelMonitor.stop(), 1000);
-            await this._runBestEffort(() => session.recorder.stop(), this._recorderStopTimeoutMs);
+
+            try {
+                await this._runWithTimeout(
+                    () => session.recorder.stop(),
+                    this._recorderStopTimeoutMs
+                );
+            } catch (error) {
+                this._deps.notify(`Recording failed to finalize: ${error.message}`);
+                toneKind = 'error';
+                return;
+            }
 
             if (!session.speechDetector.hasSpeech()) {
                 this._deps.notify('No audio detected or no speech.');
