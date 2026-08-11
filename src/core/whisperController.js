@@ -4,7 +4,8 @@ import {normalizeSettings} from './settings.js';
 import {createSpeechDetector} from './speechDetector.js';
 
 const OPERATION_TIMEOUT_MS = 700;
-const RECORDER_STOP_TIMEOUT_MS = 2500;
+const RECORDER_STOP_TIMEOUT_MS = 12000;
+const DISABLE_RECORDER_STOP_TIMEOUT_MS = 2500;
 const TRANSCRIPTION_TIMEOUT_MS = 120000;
 const CLIPBOARD_TIMEOUT_MS = 2500;
 const TRANSCRIBING_WATCHDOG_MS = 150000;
@@ -14,6 +15,7 @@ export class WhisperController {
         const {
             operationTimeoutMs = OPERATION_TIMEOUT_MS,
             recorderStopTimeoutMs = RECORDER_STOP_TIMEOUT_MS,
+            disableRecorderStopTimeoutMs = DISABLE_RECORDER_STOP_TIMEOUT_MS,
             transcriptionTimeoutMs = TRANSCRIPTION_TIMEOUT_MS,
             clipboardTimeoutMs = CLIPBOARD_TIMEOUT_MS,
             transcribingWatchdogMs = TRANSCRIBING_WATCHDOG_MS,
@@ -27,6 +29,9 @@ export class WhisperController {
         this._recorderStopTimeoutMs = Number.isFinite(recorderStopTimeoutMs)
             ? Math.max(100, recorderStopTimeoutMs)
             : RECORDER_STOP_TIMEOUT_MS;
+        this._disableRecorderStopTimeoutMs = Number.isFinite(disableRecorderStopTimeoutMs)
+            ? Math.max(100, disableRecorderStopTimeoutMs)
+            : DISABLE_RECORDER_STOP_TIMEOUT_MS;
         this._transcriptionTimeoutMs = Number.isFinite(transcriptionTimeoutMs)
             ? Math.max(100, transcriptionTimeoutMs)
             : TRANSCRIPTION_TIMEOUT_MS;
@@ -90,7 +95,10 @@ export class WhisperController {
         this._session = null;
 
         await this._runBestEffort(() => session.levelMonitor.stop());
-        await this._runBestEffort(() => session.recorder.stop(), this._recorderStopTimeoutMs);
+        await this._runBestEffort(
+            () => session.recorder.stop(),
+            this._disableRecorderStopTimeoutMs
+        );
         await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
     }
 
@@ -144,7 +152,18 @@ export class WhisperController {
             this._deps.hideOverlay();
 
             await this._runBestEffort(() => session.levelMonitor.stop(), 1000);
-            await this._runBestEffort(() => session.recorder.stop(), this._recorderStopTimeoutMs);
+
+            try {
+                await this._runWithTimeout(
+                    () => session.recorder.stop(),
+                    this._recorderStopTimeoutMs
+                );
+            } catch (error) {
+                console.error('[whisper-stt] Recorder failed to finalize:', error);
+                this._deps.notify(`Recording failed to finalize: ${error.message}`);
+                toneKind = 'error';
+                return;
+            }
 
             if (!session.speechDetector.hasSpeech()) {
                 this._deps.notify('No audio detected or no speech.');

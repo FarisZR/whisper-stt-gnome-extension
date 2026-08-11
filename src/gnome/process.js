@@ -6,19 +6,10 @@ Gio._promisify(Gio.Subprocess.prototype, 'wait_async');
 Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async', 'read_line_finish_utf8');
 Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async', 'read_bytes_finish');
 
-const PROCESS_STOP_TIMEOUT_MS = 2000;
-
-function _sleep(milliseconds) {
-    return new Promise(resolve => {
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, milliseconds, () => {
-            resolve();
-            return GLib.SOURCE_REMOVE;
-        });
-    });
-}
+const PROCESS_STOP_TIMEOUT_MS = 10000;
 
 async function _drainPipe(stream, onLine, cancellable) {
-    if (!stream || typeof onLine !== 'function')
+    if (!stream)
         return;
 
     const dataStream = new Gio.DataInputStream({base_stream: stream});
@@ -30,7 +21,8 @@ async function _drainPipe(stream, onLine, cancellable) {
             if (line === null)
                 break;
 
-            onLine(line);
+            if (typeof onLine === 'function')
+                onLine(line);
         }
     } catch (_error) {
         // Ignore pipe read errors during shutdown.
@@ -38,7 +30,7 @@ async function _drainPipe(stream, onLine, cancellable) {
 }
 
 async function _drainBytes(stream, onChunk, cancellable) {
-    if (!stream || typeof onChunk !== 'function')
+    if (!stream)
         return;
 
     try {
@@ -48,51 +40,82 @@ async function _drainBytes(stream, onChunk, cancellable) {
             if (!bytes || bytes.get_size() === 0)
                 break;
 
-            onChunk(bytes.toArray());
+            if (typeof onChunk === 'function')
+                onChunk(bytes.toArray());
         }
     } catch (_error) {
         // Ignore pipe read errors during shutdown.
     }
 }
 
-async function _stopProcess(process, cancellable) {
-    cancellable.cancel();
+async function _waitForExit(process, timeoutMs) {
+    let timeoutId = 0;
+    const waitPromise = process.wait_async(null);
+    const timeoutPromise = new Promise(resolve => {
+        timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
+            timeoutId = 0;
+            resolve(false);
+            return GLib.SOURCE_REMOVE;
+        });
+    });
 
-    let shutdownError = null;
-    let waitPromise = null;
-    let waitFailed = false;
+    try {
+        const exited = await Promise.race([
+            (async () => {
+                await waitPromise;
+                return true;
+            })(),
+            timeoutPromise,
+        ]);
+        return {exited, waitPromise};
+    } finally {
+        if (timeoutId !== 0)
+            GLib.source_remove(timeoutId);
+    }
+}
+
+async function _settleDrains(cancellable, drainPromises, graceMs = 0) {
+    if (graceMs > 0) {
+        let graceId = 0;
+        const gracePromise = new Promise(resolve => {
+            graceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, graceMs, () => {
+                graceId = 0;
+                resolve();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+
+        await Promise.race([Promise.allSettled(drainPromises), gracePromise]);
+
+        if (graceId !== 0)
+            GLib.source_remove(graceId);
+    }
+
+    cancellable.cancel();
+    await Promise.allSettled(drainPromises);
+}
+
+async function _stopProcess(process, cancellable, drainPromises, timeoutMs) {
+    let waitResult = null;
+    let waitError = null;
 
     try {
         process.send_signal(2);
     } catch (error) {
         console.error('[whisper-stt] Failed to send SIGINT to subprocess:', error);
-        shutdownError = error;
     }
 
-    let exited = false;
-
-    if (!shutdownError) {
-        waitPromise = (async () => {
-            await process.wait_async(null);
-            return true;
-        })();
-
-        const timeoutPromise = (async () => {
-            await _sleep(PROCESS_STOP_TIMEOUT_MS);
-            return false;
-        })();
-
-        try {
-            exited = await Promise.race([waitPromise, timeoutPromise]);
-        } catch (error) {
-            console.error('[whisper-stt] Failed while waiting for subprocess shutdown:', error);
-            shutdownError = error;
-            waitFailed = true;
-        }
+    try {
+        waitResult = await _waitForExit(process, timeoutMs);
+    } catch (error) {
+        console.error('[whisper-stt] Failed while waiting for subprocess shutdown:', error);
+        waitError = error;
     }
 
-    if (exited)
+    if (waitResult?.exited) {
+        await _settleDrains(cancellable, drainPromises, 200);
         return;
+    }
 
     let cleanupError = null;
 
@@ -104,20 +127,24 @@ async function _stopProcess(process, cancellable) {
     }
 
     try {
-        if (waitPromise && !waitFailed)
-            await waitPromise;
+        if (waitResult?.waitPromise)
+            await waitResult.waitPromise;
         else
             await process.wait_async(null);
     } catch (error) {
         console.error('[whisper-stt] Failed while waiting for forced subprocess shutdown:', error);
         cleanupError ??= error;
+    } finally {
+        await _settleDrains(cancellable, drainPromises);
     }
 
-    if (shutdownError)
-        throw shutdownError;
+    if (waitError)
+        throw waitError;
 
     if (cleanupError)
         throw cleanupError;
+
+    throw new Error(`Subprocess did not exit gracefully within ${timeoutMs} ms and was force-killed`);
 }
 
 export async function runCommand(argv, input = null) {
@@ -136,38 +163,49 @@ export async function runCommand(argv, input = null) {
     };
 }
 
-export function spawnLineProcess(argv, {onStdoutLine = null, onStderrLine = null} = {}) {
+function _spawnDrainedProcess(argv, drainStdout, onStderrLine, stopTimeoutMs) {
     const process = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE |
         Gio.SubprocessFlags.STDERR_PIPE);
 
     const cancellable = new Gio.Cancellable();
-
-    _drainPipe(process.get_stdout_pipe(), onStdoutLine, cancellable);
-    _drainPipe(process.get_stderr_pipe(), onStderrLine, cancellable);
+    const drainPromises = [
+        drainStdout(process.get_stdout_pipe(), cancellable),
+        _drainPipe(process.get_stderr_pipe(), onStderrLine, cancellable),
+    ];
+    let stopPromise = null;
 
     return {
         process,
         async stop() {
-            await _stopProcess(process, cancellable);
+            stopPromise ??= _stopProcess(process, cancellable, drainPromises, stopTimeoutMs);
+            await stopPromise;
         },
     };
 }
 
-export function spawnByteProcess(argv, {onStdoutChunk = null, onStderrLine = null} = {}) {
-    const process = Gio.Subprocess.new(argv,
-        Gio.SubprocessFlags.STDOUT_PIPE |
-        Gio.SubprocessFlags.STDERR_PIPE);
+export function spawnLineProcess(argv, {
+    onStdoutLine = null,
+    onStderrLine = null,
+    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
+} = {}) {
+    return _spawnDrainedProcess(
+        argv,
+        (stream, cancellable) => _drainPipe(stream, onStdoutLine, cancellable),
+        onStderrLine,
+        stopTimeoutMs
+    );
+}
 
-    const cancellable = new Gio.Cancellable();
-
-    _drainBytes(process.get_stdout_pipe(), onStdoutChunk, cancellable);
-    _drainPipe(process.get_stderr_pipe(), onStderrLine, cancellable);
-
-    return {
-        process,
-        async stop() {
-            await _stopProcess(process, cancellable);
-        },
-    };
+export function spawnByteProcess(argv, {
+    onStdoutChunk = null,
+    onStderrLine = null,
+    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
+} = {}) {
+    return _spawnDrainedProcess(
+        argv,
+        (stream, cancellable) => _drainBytes(stream, onStdoutChunk, cancellable),
+        onStderrLine,
+        stopTimeoutMs
+    );
 }
