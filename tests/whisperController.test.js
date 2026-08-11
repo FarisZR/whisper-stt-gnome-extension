@@ -230,7 +230,9 @@ test('hanging recorder stop aborts transcription instead of uploading partial au
 
     await controller.toggle();
     await controller.toggle();
-    await Promise.resolve();
+
+    for (let i = 0; i < 20 && !calls.includes('playTone:error'); i += 1)
+        await Promise.resolve();
 
     assertEqual(controller.state, 'idle');
     assert(!calls.includes('transcribeRecording'));
@@ -265,6 +267,7 @@ test('invalid operation timeout falls back to default', async () => {
     const {deps} = createDeps({
         operationTimeoutMs: Number.NaN,
         recorderStopTimeoutMs: Number.NaN,
+        disableRecorderStopTimeoutMs: Number.NaN,
         transcriptionTimeoutMs: Number.NaN,
         clipboardTimeoutMs: Number.NaN,
         transcribingWatchdogMs: Number.NaN,
@@ -273,6 +276,7 @@ test('invalid operation timeout falls back to default', async () => {
     const controller = new WhisperController(deps);
     assertEqual(controller._operationTimeoutMs, 700);
     assertEqual(controller._recorderStopTimeoutMs, 12000);
+    assertEqual(controller._disableRecorderStopTimeoutMs, 2500);
     assertEqual(controller._transcriptionTimeoutMs, 120000);
     assertEqual(controller._clipboardTimeoutMs, 2500);
     assertEqual(controller._transcribingWatchdogMs, 150000);
@@ -329,6 +333,32 @@ test('disable while recording stops resources and cleans up', async () => {
     assert(calls.includes('hideOverlay'));
     assert(calls.includes('recording.stop'));
     assert(calls.includes('level.stop'));
+    assert(calls.includes('cleanupRecording:/tmp/recording.wav'));
+});
+
+test('disable bounds recorder shutdown separately from transcription finalization', async () => {
+    const {deps, calls} = createDeps({
+        disableRecorderStopTimeoutMs: 100,
+        async startRecording(path) {
+            calls.push(`startRecording:${path}`);
+            return {
+                async stop() {
+                    calls.push('recording.stop');
+                    return await new Promise(() => {});
+                },
+            };
+        },
+    });
+    const controller = new WhisperController(deps);
+    const started = GLib.get_monotonic_time();
+
+    await controller.toggle();
+    await controller.disable();
+
+    const elapsedMs = (GLib.get_monotonic_time() - started) / 1000;
+    assertEqual(controller.state, 'idle');
+    assert(elapsedMs < 1000, `disable took ${elapsedMs} ms`);
+    assert(calls.includes('recording.stop'));
     assert(calls.includes('cleanupRecording:/tmp/recording.wav'));
 });
 

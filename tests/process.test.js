@@ -70,6 +70,8 @@ function _assertFinalizedWav(path) {
         'WAV RIFF size was not finalized');
 }
 
+const gstLaunch = GLib.find_program_in_path('gst-launch-1.0');
+
 test('spawnLineProcess stops a running process promptly', async () => {
     const handle = _spawnTestProcess(['sleep', '30']);
     const started = GLib.get_monotonic_time();
@@ -104,13 +106,34 @@ test('spawnLineProcess force-exits a SIGINT-ignoring process and reports failure
     }
 });
 
-test('spawnLineProcess allows slow GStreamer EOS to finalize WAV', async () => {
+test('spawnLineProcess drains final output before completing graceful stop', async () => {
+    const lines = [];
+    const handle = _spawnTestProcess([
+        'sh',
+        '-c',
+        'trap "echo final-line; exit 0" INT; while true; do sleep 1; done',
+    ], {
+        onStdoutLine: line => lines.push(line),
+        stopTimeoutMs: 2000,
+    });
+
+    try {
+        await _sleep(100);
+        await handle.stop();
+        assert(lines.includes('final-line'), 'final stdout line was not drained');
+    } finally {
+        await _forceCleanup(handle);
+    }
+});
+
+if (gstLaunch) {
+    test('spawnLineProcess allows slow GStreamer EOS to finalize WAV', async () => {
     const path = GLib.build_filenamev([
         GLib.get_tmp_dir(),
         `whisper-stt-slow-eos-${GLib.get_monotonic_time()}.wav`,
     ]);
     const handle = _spawnTestProcess([
-        'gst-launch-1.0',
+        gstLaunch,
         '-q',
         '-e',
         'audiotestsrc',
@@ -128,7 +151,7 @@ test('spawnLineProcess allows slow GStreamer EOS to finalize WAV', async () => {
         '!',
         'filesink',
         `location=${path}`,
-    ]);
+    ], {stopTimeoutMs: 3000});
 
     try {
         await _sleep(1200);
@@ -150,15 +173,15 @@ test('spawnLineProcess allows slow GStreamer EOS to finalize WAV', async () => {
             console.error('Failed to remove test WAV:', error);
         }
     }
-});
+    });
 
-test('spawnLineProcess drains unhandled GStreamer messages through EOS', async () => {
+    test('spawnLineProcess drains unhandled GStreamer messages through EOS', async () => {
     const path = GLib.build_filenamev([
         GLib.get_tmp_dir(),
         `whisper-stt-message-heavy-${GLib.get_monotonic_time()}.wav`,
     ]);
     const handle = _spawnTestProcess([
-        'gst-launch-1.0',
+        gstLaunch,
         '-e',
         '-m',
         'audiotestsrc',
@@ -188,7 +211,7 @@ test('spawnLineProcess drains unhandled GStreamer messages through EOS', async (
         'post-messages=true',
         '!',
         'fakesink',
-    ]);
+    ], {stopTimeoutMs: 2000});
 
     try {
         await _sleep(1500);
@@ -209,4 +232,5 @@ test('spawnLineProcess drains unhandled GStreamer messages through EOS', async (
             console.error('Failed to remove message-heavy test WAV:', error);
         }
     }
-});
+    });
+}

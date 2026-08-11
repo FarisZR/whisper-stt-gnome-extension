@@ -74,7 +74,23 @@ async function _waitForExit(process, timeoutMs) {
     }
 }
 
-async function _settleDrains(cancellable, drainPromises) {
+async function _settleDrains(cancellable, drainPromises, graceMs = 0) {
+    if (graceMs > 0) {
+        let graceId = 0;
+        const gracePromise = new Promise(resolve => {
+            graceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, graceMs, () => {
+                graceId = 0;
+                resolve();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+
+        await Promise.race([Promise.allSettled(drainPromises), gracePromise]);
+
+        if (graceId !== 0)
+            GLib.source_remove(graceId);
+    }
+
     cancellable.cancel();
     await Promise.allSettled(drainPromises);
 }
@@ -97,7 +113,7 @@ async function _stopProcess(process, cancellable, drainPromises, timeoutMs) {
     }
 
     if (waitResult?.exited) {
-        await _settleDrains(cancellable, drainPromises);
+        await _settleDrains(cancellable, drainPromises, 200);
         return;
     }
 
@@ -147,18 +163,14 @@ export async function runCommand(argv, input = null) {
     };
 }
 
-export function spawnLineProcess(argv, {
-    onStdoutLine = null,
-    onStderrLine = null,
-    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
-} = {}) {
+function _spawnDrainedProcess(argv, drainStdout, onStderrLine, stopTimeoutMs) {
     const process = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE |
         Gio.SubprocessFlags.STDERR_PIPE);
 
     const cancellable = new Gio.Cancellable();
     const drainPromises = [
-        _drainPipe(process.get_stdout_pipe(), onStdoutLine, cancellable),
+        drainStdout(process.get_stdout_pipe(), cancellable),
         _drainPipe(process.get_stderr_pipe(), onStderrLine, cancellable),
     ];
     let stopPromise = null;
@@ -172,27 +184,28 @@ export function spawnLineProcess(argv, {
     };
 }
 
+export function spawnLineProcess(argv, {
+    onStdoutLine = null,
+    onStderrLine = null,
+    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
+} = {}) {
+    return _spawnDrainedProcess(
+        argv,
+        (stream, cancellable) => _drainPipe(stream, onStdoutLine, cancellable),
+        onStderrLine,
+        stopTimeoutMs
+    );
+}
+
 export function spawnByteProcess(argv, {
     onStdoutChunk = null,
     onStderrLine = null,
     stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
 } = {}) {
-    const process = Gio.Subprocess.new(argv,
-        Gio.SubprocessFlags.STDOUT_PIPE |
-        Gio.SubprocessFlags.STDERR_PIPE);
-
-    const cancellable = new Gio.Cancellable();
-    const drainPromises = [
-        _drainBytes(process.get_stdout_pipe(), onStdoutChunk, cancellable),
-        _drainPipe(process.get_stderr_pipe(), onStderrLine, cancellable),
-    ];
-    let stopPromise = null;
-
-    return {
-        process,
-        async stop() {
-            stopPromise ??= _stopProcess(process, cancellable, drainPromises, stopTimeoutMs);
-            await stopPromise;
-        },
-    };
+    return _spawnDrainedProcess(
+        argv,
+        (stream, cancellable) => _drainBytes(stream, onStdoutChunk, cancellable),
+        onStderrLine,
+        stopTimeoutMs
+    );
 }
