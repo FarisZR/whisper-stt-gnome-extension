@@ -5,6 +5,7 @@ test('buildRecordingCommand creates a gst-launch argv list', () => {
     const argv = buildRecordingCommand('/tmp/sample.wav');
 
     assertEqual(argv[0], 'gst-launch-1.0');
+    assert(argv.includes('-e'));
     assert(argv.includes('pulsesrc'));
     assert(argv.includes('level'));
     assert(argv.includes('wavenc'));
@@ -13,8 +14,9 @@ test('buildRecordingCommand creates a gst-launch argv list', () => {
 });
 
 test('buildRecordingCommand keeps dynamic parts stable', () => {
-    assertDeepEqual(buildRecordingCommand('/x.wav').slice(0, 8), [
+    assertDeepEqual(buildRecordingCommand('/x.wav').slice(0, 9), [
         'gst-launch-1.0',
+        '-e',
         '-m',
         'pulsesrc',
         '!',

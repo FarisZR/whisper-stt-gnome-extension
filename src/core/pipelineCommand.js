@@ -1,6 +1,7 @@
 export function buildRecordingCommand(outputPath) {
     return [
         'gst-launch-1.0',
+        '-e',
         '-m',
         'pulsesrc',
         '!',

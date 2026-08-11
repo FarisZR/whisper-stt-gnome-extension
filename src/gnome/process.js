@@ -56,20 +56,21 @@ async function _drainBytes(stream, onChunk, cancellable) {
 async function _stopProcess(process, cancellable) {
     cancellable.cancel();
 
-    if (!process.get_if_exited()) {
-        try {
-            process.send_signal(2);
-        } catch (_error) {
-            process.force_exit();
-        }
+    try {
+        process.send_signal(2);
+    } catch (_error) {
+        process.force_exit();
     }
 
     const waitPromise = process.wait_async(null);
-    await Promise.race([waitPromise, _sleep(700)]);
+    const exited = await Promise.race([
+        waitPromise.then(() => true),
+        _sleep(700).then(() => false),
+    ]);
 
-    if (!process.get_if_exited()) {
+    if (!exited) {
         process.force_exit();
-        await process.wait_async(null);
+        await waitPromise;
     }
 }
 
