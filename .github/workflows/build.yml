@@ -1,0 +1,119 @@
+name: Build extension
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gjs gnome-shell libglib2.0-bin
+      - name: Identify build
+        id: version
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Test extension
+        run: ./scripts/test.sh
+      - name: Build and validate both bundles
+        env:
+          BUILD_COMMIT: ${{ steps.version.outputs.commit }}
+        run: |
+          ./scripts/package.sh dist "$BUILD_COMMIT"
+          python3 tests/check_package.py dist "$BUILD_COMMIT"
+          cd dist
+          sha256sum *.zip *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: extension-bundles
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.repository == 'FarisZR/whisper-stt-gnome-extension' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      published: ${{ steps.release.outputs.published }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: extension-bundles
+          path: dist
+      - name: Publish immutable commit release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          set -euo pipefail
+          # Do not let a delayed build move the tap back to an older commit.
+          current=$(gh api repos/FarisZR/whisper-stt-gnome-extension/commits/main --jq .sha)
+          if [ "$current" != "$BUILD_COMMIT" ]; then
+            echo "A newer main commit exists; skipping publication."
+            exit 0
+          fi
+          cd dist
+          sha256sum --check SHA256SUMS
+          tag="build-$BUILD_COMMIT"
+          if ! gh release view "$tag" --repo FarisZR/whisper-stt-gnome-extension >/dev/null 2>&1; then
+            gh release create "$tag" --repo FarisZR/whisper-stt-gnome-extension \
+              --target "$BUILD_COMMIT" --draft \
+              --title "Rolling build $BUILD_COMMIT" \
+              --notes "GNOME Shell 49/50 extension built from commit $BUILD_COMMIT."
+            gh release upload "$tag" --repo FarisZR/whisper-stt-gnome-extension \
+              ./*.zip ./*.tar.gz SHA256SUMS
+          fi
+          # Repeated builds keep published assets unchanged. A failed draft
+          # upload can be recovered by deleting the draft and rerunning.
+          gh release view "$tag" --repo FarisZR/whisper-stt-gnome-extension \
+            --json assets --jq '[.assets[].name] | sort' > /tmp/assets.json
+          python3 -c 'import json; assert json.load(open("/tmp/assets.json")) == ["SHA256SUMS", "whisper-stt-gnome-extension.tar.gz", "whisper-stt@fariszr.com.shell-extension.zip"]'
+          gh release edit "$tag" --repo FarisZR/whisper-stt-gnome-extension --draft=false --latest=false
+          current=$(gh api repos/FarisZR/whisper-stt-gnome-extension/commits/main --jq .sha)
+          if [ "$current" != "$BUILD_COMMIT" ]; then
+            echo "A newer main commit arrived during upload; leaving this release non-latest."
+            exit 0
+          fi
+          gh release edit "$tag" --repo FarisZR/whisper-stt-gnome-extension --latest
+          echo 'published=true' >> "$GITHUB_OUTPUT"
+
+  update-homebrew:
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Notify tap after successful publication
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::TAP_GITHUB_TOKEN is missing. The tap's scheduled sync will pick up this build."
+            exit 0
+          fi
+          printf '%s\n' '{"ref":"main"}' | gh api --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            repos/FarisZR/homebrew-tap/actions/workflows/sync.yml/dispatches --input -
