@@ -1,0 +1,39 @@
+name: Bootstrap rolling release
+on:
+  push:
+    branches: [feat/release-homebrew]
+    paths: [.github/workflows/bootstrap.yml]
+permissions:
+  contents: write
+jobs:
+  bootstrap:
+    if: github.repository == 'FarisZR/whisper-stt-gnome-extension'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gjs gnome-shell libglib2.0-bin
+      - name: Validate and publish existing main runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOOTSTRAP_COMMIT: d4048fc37740adea30b365f7d224d16f7890c55e
+        run: |
+          set -euo pipefail
+          current=$(gh api repos/FarisZR/whisper-stt-gnome-extension/commits/main --jq .sha)
+          test "$current" = "$BOOTSTRAP_COMMIT"
+          git diff --exit-code "$BOOTSTRAP_COMMIT" -- extension.js prefs.js metadata.json stylesheet.css src schemas LICENSE
+          ./scripts/test.sh
+          ./scripts/package.sh dist "$BOOTSTRAP_COMMIT"
+          python3 tests/check_package.py dist "$BOOTSTRAP_COMMIT"
+          cd dist
+          sha256sum *.zip *.tar.gz > SHA256SUMS
+          tag="build-$BOOTSTRAP_COMMIT"
+          draft=$(gh release view "$tag" --repo FarisZR/whisper-stt-gnome-extension --json isDraft --jq .isDraft)
+          test "$draft" = true
+          gh release upload "$tag" --repo FarisZR/whisper-stt-gnome-extension --clobber ./*.zip ./*.tar.gz SHA256SUMS
+          gh release edit "$tag" --repo FarisZR/whisper-stt-gnome-extension --draft=false --latest
