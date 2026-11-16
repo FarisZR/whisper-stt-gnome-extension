@@ -41,6 +41,30 @@ eval_shell() {
     gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
         --method org.gnome.Shell.Eval "$1"
 }
+eval_shell '(async () => {
+    const Main = await import("resource:///org/gnome/shell/ui/main.js");
+    const base = Main.extensionManager.lookup("whisper-stt@fariszr.com").dir.get_uri();
+    const {spawnLineProcess} = await import(`${base}/src/gnome/process.js`);
+    const {buildRecordingCommand} = await import(`${base}/src/core/pipelineCommand.js`);
+    const {parseLevelLine} = await import(`${base}/src/core/levelParser.js`);
+    const {createSpeechDetector} = await import(`${base}/src/core/speechDetector.js`);
+    const GLib = (await import("gi://GLib")).default;
+    const detector = createSpeechDetector();
+    const command = buildRecordingCommand("/dev/null");
+    command.splice(command.indexOf("pulsesrc"), 1, "audiotestsrc", "is-live=true");
+    const recorder = spawnLineProcess(command, {onStdoutLine: line => {
+        const level = parseLevelLine(line);
+        if (level !== null) detector.pushLevel(level);
+    }});
+    try {
+        await new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            resolve(); return GLib.SOURCE_REMOVE;
+        }));
+    } finally {
+        await recorder.stop();
+    }
+    return detector.hasSpeech() ? "SHELL_METER_OK" : "SHELL_METER_SILENT";
+})()' | rg 'true,.*SHELL_METER_OK'
 eval_shell '(async () => { const Main = await import("resource:///org/gnome/shell/ui/main.js"); const e = Main.extensionManager.lookup("whisper-stt@fariszr.com").stateObj; e._overlay.show(); e._overlay.update(0.8); const count = e._overlay._bars.length; const GLib = (await import("gi://GLib")).default; await new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => { resolve(); return GLib.SOURCE_REMOVE; })); if (e._overlay._targetLevel !== 0) throw new Error("stale levels must decay"); e._overlay.hide(); return count; })()' | rg "true, '18'"
 gjs -m "$ROOT_DIR/tests/prefs-smoke.js" "$SMOKE_EXTENSION"
 gnome-extensions disable whisper-stt@fariszr.com
@@ -48,4 +72,4 @@ gnome-extensions info whisper-stt@fariszr.com | rg 'State: INACTIVE'
 if rg 'JS ERROR|whisper-stt.*(Error|CRITICAL)' "$XDG_CONFIG_HOME/shell.log"; then
     exit 1
 fi
-echo 'Shell load, overlay, preferences and disable passed.'
+echo 'Shell load, recording levels, overlay, preferences and disable passed.'

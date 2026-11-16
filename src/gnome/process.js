@@ -3,7 +3,6 @@ import GLib from 'gi://GLib';
 
 Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async');
 Gio._promisify(Gio.Subprocess.prototype, 'wait_async');
-Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async', 'read_line_finish_utf8');
 
 const PROCESS_STOP_TIMEOUT_MS = 10000;
 
@@ -15,7 +14,16 @@ async function _drainPipe(stream, onLine, cancellable) {
 
     try {
         while (true) {
-            const [line] = await dataStream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable);
+            // Shell already promisifies read_line_async with the byte-returning finish.
+            const line = await new Promise((resolve, reject) => {
+                dataStream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable, (stream, result) => {
+                    try {
+                        resolve(stream.read_line_finish_utf8(result)[0]);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
 
             if (line === null)
                 break;

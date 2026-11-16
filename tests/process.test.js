@@ -113,6 +113,12 @@ test('spawnLineProcess drains final output before completing graceful stop', asy
 });
 
 if (gstLaunch) {
+    test('recording levels work with GNOME Shell byte-returning Gio wrappers', async () => {
+        const result = await runCommand(['gjs', '-m', 'tests/fixtures/sharedGioRuntime.js']);
+        assert(result.success, result.stderr);
+        assert(result.stdout.includes('SHARED_GIO_METER_OK'));
+    });
+
         test('spawnLineProcess allows slow GStreamer EOS to finalize WAV', async () => {
         const path = GLib.build_filenamev([
             GLib.get_tmp_dir(),

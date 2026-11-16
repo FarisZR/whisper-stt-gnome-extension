@@ -73,3 +73,23 @@ The [GNOME 51 porting guide](https://gjs.guide/extensions/upgrading/gnome-shell-
 - No real microphone recording was sent to an external endpoint. Audio integration uses a synthetic GStreamer source; request/response behavior uses behavioral tests.
 - Publication was tested with a fake GitHub CLI, including draft repair, immutable reruns and stale-main rejection. No live release, tap update or remote push was performed.
 - GitHub release tags remain necessary immutable artifact identifiers for the existing tap. Build triggers are `main` pushes, pull requests and manual dispatch, with publication restricted to current `main`.
+
+## Follow-up: zero meter despite recorded microphone audio
+
+The first deployment exposed a regression missed by the original smoke test.
+Live inspection confirmed that the extension used the system-selected Lenovo
+microphone and wrote a WAV with nonzero audio, but reported no speech.
+
+GNOME Shell's `ui/environment.js` already calls `Gio._promisify` on
+`DataInputStream.read_line_async` with its byte-returning finish method.
+Repeating `_promisify` with `read_line_finish_utf8` does not replace that wrapper.
+The new metering path therefore received byte arrays, which its text parser
+rejected. Standalone GJS tests ran before any other wrapper was installed, so
+they passed while Shell failed.
+
+Pipe reads now use an explicit async callback and `read_line_finish_utf8`,
+independent of shared prototype wrappers. No microphone routing change is needed.
+`tests/fixtures/sharedGioRuntime.js` reproduces Shell's wrapper before loading the
+process module: it failed before this correction and passes after it.
+The real Shell smoke test now records a synthetic source and checks speech
+levels inside Shell, alongside overlay, preferences and disable checks.
