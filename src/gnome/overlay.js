@@ -83,14 +83,14 @@ export class VoiceOverlay {
 
         const box = new St.BoxLayout({
             style_class: 'osd-window whisper-stt-osd-window',
-            vertical: true,
+            orientation: Clutter.Orientation.VERTICAL,
             x_align: Clutter.ActorAlign.CENTER,
         });
         this._actor.add_child(box);
 
         const waves = new St.BoxLayout({
             style_class: 'whisper-stt-waves',
-            vertical: false,
+            orientation: Clutter.Orientation.HORIZONTAL,
             x_align: Clutter.ActorAlign.CENTER,
             x_expand: false,
         });

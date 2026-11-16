@@ -21,7 +21,7 @@ with zipfile.ZipFile(output / f"{uuid}.shell-extension.zip") as bundle:
     assert not any(name.startswith(("tests/", ".git/", "media/", "scripts/")) for name in files)
     metadata = json.loads(files["metadata.json"])
     assert metadata["uuid"] == uuid
-    assert metadata["shell-version"] == ["49", "50"]
+    assert metadata["shell-version"] == ["49", "50", "51"]
     if version:
         assert metadata["version-name"] == version
         assert isinstance(metadata["version"], int) and metadata["version"] > 0

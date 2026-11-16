@@ -2,7 +2,7 @@ import GLib from 'gi://GLib';
 
 import {test, assertDeepEqual} from './harness.js';
 
-test('metadata supports current stable GNOME 50', async () => {
+test('metadata supports GNOME 49, 50, and 51', async () => {
     let metadata;
 
     try {
@@ -17,5 +17,5 @@ test('metadata supports current stable GNOME 50', async () => {
         throw error;
     }
 
-    assertDeepEqual(metadata['shell-version'], ['49', '50']);
+    assertDeepEqual(metadata['shell-version'], ['49', '50', '51']);
 });

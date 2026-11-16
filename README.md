@@ -4,7 +4,7 @@ A GNOME Shell extension that records microphone audio with a keyboard shortcut,
 sends it to an OpenAI-compatible speech-to-text endpoint, then plays a tone and
 copies the transcript to the clipboard.
 
-Supported GNOME Shell versions: 49 and 50.
+Supported GNOME Shell versions: 49, 50, and 51.
 
 ![settings](media/settings.png)
 
@@ -12,7 +12,7 @@ Supported GNOME Shell versions: 49 and 50.
 
 ### Homebrew (Linux)
 
-Requires Homebrew 6 or newer and GNOME Shell 49 or 50:
+Requires Homebrew 6 or newer and GNOME Shell 49, 50, or 51:
 
 ```bash
 brew tap fariszr/tap
