@@ -17,7 +17,6 @@ test('normalizeSettings returns defaults', () => {
         proxyPassword: '',
         bypassVpnEnabled: false,
         bypassVpnInterface: '',
-        shortcut: ['<Ctrl><Super>space'],
     });
 });
 
@@ -37,7 +36,6 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         proxyPassword: ' pass ',
         bypassVpnEnabled: true,
         bypassVpnInterface: ' enp6s0 ',
-        shortcut: [' <Alt>F8 '],
     }), {
         endpoint: 'https://example.com/v1/audio/transcriptions',
         model: 'gpt-4o-mini-transcribe',
@@ -53,7 +51,6 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         proxyPassword: 'pass',
         bypassVpnEnabled: true,
         bypassVpnInterface: 'enp6s0',
-        shortcut: ['<Alt>F8'],
     });
 });
 
@@ -62,7 +59,6 @@ test('normalizeSettings falls back for blank endpoint/model/format', () => {
         endpoint: ' ',
         model: ' ',
         responseFormat: ' ',
-        shortcut: [],
     }), {
         endpoint: 'https://api.openai.com/v1/audio/transcriptions',
         model: 'whisper-1',
@@ -78,7 +74,6 @@ test('normalizeSettings falls back for blank endpoint/model/format', () => {
         proxyPassword: '',
         bypassVpnEnabled: false,
         bypassVpnInterface: '',
-        shortcut: ['<Ctrl><Super>space'],
     });
 });
 
@@ -98,7 +93,6 @@ test('normalizeSettings handles non-string values safely', () => {
         proxyPassword: {},
         bypassVpnEnabled: 'yes',
         bypassVpnInterface: null,
-        shortcut: 'invalid',
     }), {
         endpoint: 'https://api.openai.com/v1/audio/transcriptions',
         model: 'whisper-1',
@@ -114,7 +108,6 @@ test('normalizeSettings handles non-string values safely', () => {
         proxyPassword: '',
         bypassVpnEnabled: false,
         bypassVpnInterface: '',
-        shortcut: ['<Ctrl><Super>space'],
     });
 });
 
@@ -138,6 +131,5 @@ test('normalizeSettings falls back to socks5 for unknown proxy type', () => {
         proxyPassword: '',
         bypassVpnEnabled: false,
         bypassVpnInterface: '',
-        shortcut: ['<Ctrl><Super>space'],
     });
 });

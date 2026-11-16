@@ -3,49 +3,27 @@ import GLib from 'gi://GLib';
 import {normalizeSettings} from './settings.js';
 import {createSpeechDetector} from './speechDetector.js';
 
-const OPERATION_TIMEOUT_MS = 700;
-const RECORDER_STOP_TIMEOUT_MS = 12000;
-const DISABLE_RECORDER_STOP_TIMEOUT_MS = 2500;
-const TRANSCRIPTION_TIMEOUT_MS = 120000;
-const CLIPBOARD_TIMEOUT_MS = 2500;
-const TRANSCRIBING_WATCHDOG_MS = 150000;
+const TIMEOUTS = {
+    operation: [700, 50],
+    recorderStop: [12000, 100],
+    disableRecorderStop: [2500, 100],
+    transcription: [120000, 100],
+    clipboard: [2500, 50],
+};
 
 export class WhisperController {
     constructor(deps) {
-        const {
-            operationTimeoutMs = OPERATION_TIMEOUT_MS,
-            recorderStopTimeoutMs = RECORDER_STOP_TIMEOUT_MS,
-            disableRecorderStopTimeoutMs = DISABLE_RECORDER_STOP_TIMEOUT_MS,
-            transcriptionTimeoutMs = TRANSCRIPTION_TIMEOUT_MS,
-            clipboardTimeoutMs = CLIPBOARD_TIMEOUT_MS,
-            transcribingWatchdogMs = TRANSCRIBING_WATCHDOG_MS,
-            ...runtimeDeps
-        } = deps;
-
-        this._deps = runtimeDeps;
-        this._operationTimeoutMs = Number.isFinite(operationTimeoutMs)
-            ? Math.max(50, operationTimeoutMs)
-            : OPERATION_TIMEOUT_MS;
-        this._recorderStopTimeoutMs = Number.isFinite(recorderStopTimeoutMs)
-            ? Math.max(100, recorderStopTimeoutMs)
-            : RECORDER_STOP_TIMEOUT_MS;
-        this._disableRecorderStopTimeoutMs = Number.isFinite(disableRecorderStopTimeoutMs)
-            ? Math.max(100, disableRecorderStopTimeoutMs)
-            : DISABLE_RECORDER_STOP_TIMEOUT_MS;
-        this._transcriptionTimeoutMs = Number.isFinite(transcriptionTimeoutMs)
-            ? Math.max(100, transcriptionTimeoutMs)
-            : TRANSCRIPTION_TIMEOUT_MS;
-        this._clipboardTimeoutMs = Number.isFinite(clipboardTimeoutMs)
-            ? Math.max(50, clipboardTimeoutMs)
-            : CLIPBOARD_TIMEOUT_MS;
-        this._transcribingWatchdogMs = Number.isFinite(transcribingWatchdogMs)
-            ? Math.max(100, transcribingWatchdogMs)
-            : TRANSCRIBING_WATCHDOG_MS;
-
+        this._deps = deps;
+        this._timeouts = Object.fromEntries(Object.entries(TIMEOUTS).map(([name, [fallback, minimum]]) => {
+            const value = deps[`${name}TimeoutMs`];
+            return [name, Number.isFinite(value) ? Math.max(minimum, value) : fallback];
+        }));
         this._state = 'idle';
+        this._disabled = false;
         this._session = null;
         this._toggleInFlight = false;
-        this._transcribingWatchdogId = 0;
+        this._activeOperation = null;
+        this._restartPromise = null;
     }
 
     get state() {
@@ -53,39 +31,53 @@ export class WhisperController {
     }
 
     async toggle() {
-        if (this._toggleInFlight) {
-            if (this._state === 'transcribing')
-                this._deps.notify('Transcription in progress');
-
+        if (this._disabled)
             return;
+        if (this._state === 'transcribing') {
+            this._restartPromise ??= this._replaceRecording().finally(() => {
+                this._restartPromise = null;
+            });
+            return await this._restartPromise;
         }
+        if (this._toggleInFlight)
+            return;
 
         this._toggleInFlight = true;
 
         try {
-            if (this._state === 'transcribing') {
-                this._deps.notify('Transcription in progress');
-                return;
-            }
-
             if (this._state === 'idle') {
                 await this._startRecording();
                 return;
             }
 
-            if (this._state === 'recording')
-                await this._finishRecording();
+            if (this._state === 'recording') {
+                this._activeOperation = this._finishRecording();
+                await this._activeOperation;
+            }
         } finally {
             this._toggleInFlight = false;
         }
     }
 
+    async _replaceRecording() {
+        this._session.discarded = true;
+        this._session.cancel();
+        this._deps.cancelTranscription?.();
+        await this._activeOperation;
+        await this.toggle();
+    }
+
     async disable() {
-        this._clearTranscribingWatchdog();
+        this._disabled = true;
+        this._session?.cancel();
+        this._deps.cancelTranscription?.();
 
         if (this._state !== 'recording') {
             this._state = 'idle';
+            const session = this._session;
             this._session = null;
+            if (session)
+                await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
             return;
         }
 
@@ -94,10 +86,9 @@ export class WhisperController {
         this._state = 'idle';
         this._session = null;
 
-        await this._runBestEffort(() => session.levelMonitor.stop());
         await this._runBestEffort(
             () => session.recorder.stop(),
-            this._disableRecorderStopTimeoutMs
+            this._timeouts.disableRecorderStop
         );
         await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
     }
@@ -109,17 +100,27 @@ export class WhisperController {
         let recorder = null;
 
         try {
-            recorder = await this._deps.startRecording(path, settings);
-            const levelMonitor = await this._deps.startLevelMonitor(level => {
+            recorder = await this._deps.startRecording(path, level => {
+                if (this._disabled)
+                    return;
                 speechDetector.pushLevel(level);
                 this._deps.updateOverlay(level);
-            }, settings);
+            });
+            if (this._disabled) {
+                await this._runBestEffort(() => recorder.stop(), this._timeouts.recorderStop);
+                await this._runBestEffort(() => this._deps.cleanupRecording(path), 1000);
+                return;
+            }
 
+            let cancel;
+            const cancellation = new Promise(resolve => { cancel = resolve; });
             this._session = {
+                cancellation,
+                cancel,
+                discarded: false,
                 path,
                 settings,
                 recorder,
-                levelMonitor,
                 speechDetector,
             };
 
@@ -129,41 +130,38 @@ export class WhisperController {
             this._state = 'idle';
             this._session = null;
 
-            await this._runBestEffort(() => recorder?.stop?.(), this._recorderStopTimeoutMs);
+            await this._runBestEffort(() => recorder?.stop?.(), this._timeouts.recorderStop);
             await this._runBestEffort(() => this._deps.cleanupRecording(path), 1000);
 
-            this._deps.notify(`Failed to start recording: ${error.message}`);
+            if (!this._disabled)
+                this._deps.notify(`Failed to start recording: ${error.message}`);
         }
     }
 
     async _finishRecording() {
         const session = this._session;
 
-        if (!session) {
-            this._state = 'idle';
-            return;
-        }
-
         this._state = 'transcribing';
-        this._startTranscribingWatchdog(session);
         let toneKind = 'success';
 
         try {
             this._deps.hideOverlay();
 
-            await this._runBestEffort(() => session.levelMonitor.stop(), 1000);
-
             try {
                 await this._runWithTimeout(
                     () => session.recorder.stop(),
-                    this._recorderStopTimeoutMs
+                    this._timeouts.recorderStop
                 );
             } catch (error) {
-                console.error('[whisper-stt] Recorder failed to finalize:', error);
+                if (this._disabled || session.discarded)
+                    return;
                 this._deps.notify(`Recording failed to finalize: ${error.message}`);
                 toneKind = 'error';
                 return;
             }
+
+            if (this._disabled || session.discarded)
+                return;
 
             if (!session.speechDetector.hasSpeech()) {
                 this._deps.notify('No audio detected or no speech.');
@@ -173,8 +171,11 @@ export class WhisperController {
 
             const transcript = await this._runWithTimeout(
                 () => this._deps.transcribeRecording(session.path, session.settings),
-                this._transcriptionTimeoutMs
+                this._timeouts.transcription,
+                session.cancellation
             );
+            if (this._disabled || session.discarded)
+                return;
             const cleaned = typeof transcript === 'string' ? transcript.trim() : '';
 
             if (cleaned.length > 0) {
@@ -183,12 +184,16 @@ export class WhisperController {
                 try {
                     await this._runWithTimeout(
                         () => this._deps.copyToClipboard(cleaned),
-                        this._clipboardTimeoutMs
+                        this._timeouts.clipboard,
+                        session.cancellation
                     );
                     copied = true;
                 } catch (_error) {
                     copied = false;
                 }
+
+                if (this._disabled || session.discarded)
+                    return;
 
                 if (copied)
                     this._deps.notify('Transcription copied to clipboard');
@@ -199,46 +204,21 @@ export class WhisperController {
             }
 
         } catch (error) {
-            this._deps.notify(`Transcription failed: ${error.message}`);
+            if (!this._disabled && !session.discarded)
+                this._deps.notify(`Transcription failed: ${error.message}`);
             toneKind = 'error';
         } finally {
-            this._clearTranscribingWatchdog();
             this._session = null;
             this._state = 'idle';
 
-            void this._runBestEffort(() => this._deps.playTone(toneKind));
-            void this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
+            if (!this._disabled && !session.discarded)
+                void this._runBestEffort(() => this._deps.playTone(toneKind));
+            this._deps.cancelTranscription?.();
+            await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
         }
     }
 
-    _startTranscribingWatchdog(session) {
-        this._clearTranscribingWatchdog();
-
-        this._transcribingWatchdogId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._transcribingWatchdogMs, () => {
-            if (this._state !== 'transcribing')
-                return GLib.SOURCE_REMOVE;
-
-            this._deps.notify('Transcription took too long. Resetting state.');
-            this._state = 'idle';
-            this._session = null;
-
-            void this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);
-
-            this._transcribingWatchdogId = 0;
-            return GLib.SOURCE_REMOVE;
-        });
-        GLib.Source.set_name_by_id(this._transcribingWatchdogId, '[whisper-stt] transcribing-watchdog');
-    }
-
-    _clearTranscribingWatchdog() {
-        if (this._transcribingWatchdogId === 0)
-            return;
-
-        GLib.source_remove(this._transcribingWatchdogId);
-        this._transcribingWatchdogId = 0;
-    }
-
-    async _runBestEffort(action, timeoutMs = this._operationTimeoutMs) {
+    async _runBestEffort(action, timeoutMs = this._timeouts.operation) {
         try {
             await this._runWithTimeout(action, timeoutMs);
         } catch (_error) {
@@ -246,7 +226,7 @@ export class WhisperController {
         }
     }
 
-    async _runWithTimeout(action, timeoutMs) {
+    async _runWithTimeout(action, timeoutMs, cancellation = null) {
         let timeoutId = 0;
 
         try {
@@ -261,6 +241,7 @@ export class WhisperController {
             return await Promise.race([
                 Promise.resolve().then(action),
                 timeoutPromise,
+                ...(cancellation ? [cancellation] : []),
             ]);
         } finally {
             if (timeoutId !== 0)

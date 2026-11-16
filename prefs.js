@@ -1,21 +1,13 @@
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
+import Gio from 'gi://Gio';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.whisper-stt';
 
 function _addBoundRow(group, settings, key, row) {
-    row.connect('changed', () => {
-        settings.set_string(key, row.get_text());
-    });
-
-    settings.connect(`changed::${key}`, () => {
-        const latest = settings.get_string(key);
-
-        if (row.get_text() !== latest)
-            row.set_text(latest);
-    });
+    settings.bind(key, row, 'text', Gio.SettingsBindFlags.DEFAULT);
 
     group.add(row);
 
@@ -95,13 +87,9 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         const proxyUsernameRow = _addStringRow(proxyGroup, settings, _('Proxy Username (optional)'), 'proxy-username');
         const proxyPasswordRow = _addPasswordRow(proxyGroup, settings, _('Proxy Password (optional)'), 'proxy-password');
 
-        const updateProxyRowsVisibility = enabled => {
-            proxyTypeRow.set_visible(enabled);
-            proxyHostRow.set_visible(enabled);
-            proxyPortRow.set_visible(enabled);
-            proxyUsernameRow.set_visible(enabled);
-            proxyPasswordRow.set_visible(enabled);
-        };
+        settings.bind('proxy-enabled', proxyToggleRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        for (const row of [proxyTypeRow, proxyHostRow, proxyPortRow, proxyUsernameRow, proxyPasswordRow])
+            settings.bind('proxy-enabled', row, 'visible', Gio.SettingsBindFlags.GET);
 
         proxyTypeRow.connect('notify::selected', () => {
             const proxyType = proxyTypeRow.get_selected() === 1 ? 'http' : 'socks5';
@@ -114,24 +102,6 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
             if (proxyTypeRow.get_selected() !== selected)
                 proxyTypeRow.set_selected(selected);
         });
-
-        proxyToggleRow.connect('notify::active', () => {
-            const enabled = proxyToggleRow.get_active();
-            updateProxyRowsVisibility(enabled);
-            settings.set_boolean('proxy-enabled', enabled);
-        });
-
-        settings.connect('changed::proxy-enabled', () => {
-            const enabled = settings.get_boolean('proxy-enabled');
-
-            if (proxyToggleRow.get_active() !== enabled)
-                proxyToggleRow.set_active(enabled);
-
-            updateProxyRowsVisibility(enabled);
-        });
-
-        const proxyEnabled = settings.get_boolean('proxy-enabled');
-        updateProxyRowsVisibility(proxyEnabled);
 
         const bypassGroup = new Adw.PreferencesGroup({
             title: _('VPN Bypass'),
@@ -153,26 +123,8 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
             _('Example: enp6s0 or wlan0')
         );
 
-        const updateBypassRowsVisibility = enabled => {
-            bypassInterfaceRow.set_visible(enabled);
-        };
-
-        bypassToggleRow.connect('notify::active', () => {
-            const enabled = bypassToggleRow.get_active();
-            updateBypassRowsVisibility(enabled);
-            settings.set_boolean('bypass-vpn-enabled', enabled);
-        });
-
-        settings.connect('changed::bypass-vpn-enabled', () => {
-            const enabled = settings.get_boolean('bypass-vpn-enabled');
-
-            if (bypassToggleRow.get_active() !== enabled)
-                bypassToggleRow.set_active(enabled);
-
-            updateBypassRowsVisibility(enabled);
-        });
-
-        updateBypassRowsVisibility(settings.get_boolean('bypass-vpn-enabled'));
+        settings.bind('bypass-vpn-enabled', bypassToggleRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('bypass-vpn-enabled', bypassInterfaceRow, 'visible', Gio.SettingsBindFlags.GET);
 
         const shortcutGroup = new Adw.PreferencesGroup({
             title: _('Shortcut'),

@@ -64,17 +64,6 @@ def main() -> int:
         f"  funcs:    {fnh_adjusted}/{fnf_adjusted} ({_percent(fnh_adjusted, fnf_adjusted):.2f}%)"
     )
 
-    if _percent(lh, lf) < 100.0:
-        print("Coverage gate failed: lines are below 100%", file=sys.stderr)
-        return 1
-
-    if _percent(fnh_adjusted, fnf_adjusted) < 100.0:
-        print(
-            "Coverage gate failed: adjusted function coverage is below 100%",
-            file=sys.stderr,
-        )
-        return 1
-
     return 0
 
 

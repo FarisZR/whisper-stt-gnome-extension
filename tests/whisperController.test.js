@@ -1,16 +1,7 @@
 import GLib from 'gi://GLib';
 
-import {test, assert, assertEqual, assertIncludes} from './harness.js';
+import {test, assert, assertEqual} from './harness.js';
 import {WhisperController} from '../src/core/whisperController.js';
-
-function waitMs(milliseconds) {
-    return new Promise(resolve => {
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, milliseconds, () => {
-            resolve();
-            return GLib.SOURCE_REMOVE;
-        });
-    });
-}
 
 function createDeps(overrides = {}) {
     const calls = [];
@@ -23,22 +14,10 @@ function createDeps(overrides = {}) {
             calls.push('createRecordingPath');
             return '/tmp/recording.wav';
         },
-        async startRecording(path) {
+        async startRecording(path, onLevel) {
             calls.push(`startRecording:${path}`);
-            return {
-                async stop() {
-                    calls.push('recording.stop');
-                },
-            };
-        },
-        async startLevelMonitor(onLevel) {
-            calls.push('startLevelMonitor');
             onLevel(0.4);
-            return {
-                async stop() {
-                    calls.push('level.stop');
-                },
-            };
+            return {async stop() { calls.push('recording.stop'); }};
         },
         async transcribeRecording() {
             calls.push('transcribeRecording');
@@ -82,6 +61,42 @@ test('first toggle starts recording and overlay', async () => {
     assert(calls.includes('updateOverlay:0.4'));
 });
 
+test('disable during startup releases late resources without showing overlay', async () => {
+    let finishStart;
+    const {deps, calls} = createDeps({
+        startRecording() {
+            return new Promise(resolve => { finishStart = resolve; });
+        },
+    });
+    const controller = new WhisperController(deps);
+    const starting = controller.toggle();
+    await controller.disable();
+    finishStart({async stop() { calls.push('late.stop'); }});
+    await starting;
+    assertEqual(controller.state, 'idle');
+    assert(calls.includes('late.stop'));
+    assert(!calls.includes('showOverlay'));
+});
+
+test('disable during transcription suppresses late clipboard and notifications', async () => {
+    let finish;
+    const {deps, calls} = createDeps({
+        transcribeRecording() { return new Promise(resolve => { finish = resolve; }); },
+    });
+    const controller = new WhisperController(deps);
+    await controller.toggle();
+    const pending = controller.toggle();
+    for (let i = 0; i < 100 && !finish; i += 1)
+        await Promise.resolve();
+    assert(finish, 'transcription was not reached');
+    await controller.disable();
+    const afterDisable = calls.length;
+    finish('late text');
+    await pending;
+    assert(!calls.slice(afterDisable).some(c => /^(copyToClipboard|notify|playTone):/.test(c)));
+    assert(calls.includes('cleanupRecording:/tmp/recording.wav'));
+});
+
 test('second toggle stops, transcribes, copies and plays tone', async () => {
     const {deps, calls} = createDeps();
     const controller = new WhisperController(deps);
@@ -91,7 +106,6 @@ test('second toggle stops, transcribes, copies and plays tone', async () => {
 
     assertEqual(controller.state, 'idle');
     assert(calls.includes('recording.stop'));
-    assert(calls.includes('level.stop'));
     assert(calls.includes('transcribeRecording'));
     assert(calls.includes('copyToClipboard:hello world'));
     assert(calls.includes('playTone:success'));
@@ -159,21 +173,6 @@ test('start failure returns to idle and notifies', async () => {
     await controller.toggle();
 
     assertEqual(controller.state, 'idle');
-    assert(calls.some(c => c.startsWith('notify:Failed to start recording')));
-});
-
-test('level monitor start failure stops recorder and notifies', async () => {
-    const {deps, calls} = createDeps({
-        async startLevelMonitor() {
-            throw new Error('monitor failed');
-        },
-    });
-    const controller = new WhisperController(deps);
-
-    await controller.toggle();
-
-    assertEqual(controller.state, 'idle');
-    assert(calls.includes('recording.stop'));
     assert(calls.some(c => c.startsWith('notify:Failed to start recording')));
 });
 
@@ -263,30 +262,15 @@ test('hanging clipboard copy times out and allows next recording', async () => {
     assertEqual(startCalls.length, 2);
 });
 
-test('invalid operation timeout falls back to default', async () => {
-    const {deps} = createDeps({
-        operationTimeoutMs: Number.NaN,
-        recorderStopTimeoutMs: Number.NaN,
-        disableRecorderStopTimeoutMs: Number.NaN,
-        transcriptionTimeoutMs: Number.NaN,
-        clipboardTimeoutMs: Number.NaN,
-        transcribingWatchdogMs: Number.NaN,
-    });
-
-    const controller = new WhisperController(deps);
-    assertEqual(controller._operationTimeoutMs, 700);
-    assertEqual(controller._recorderStopTimeoutMs, 12000);
-    assertEqual(controller._disableRecorderStopTimeoutMs, 2500);
-    assertEqual(controller._transcriptionTimeoutMs, 120000);
-    assertEqual(controller._clipboardTimeoutMs, 2500);
-    assertEqual(controller._transcribingWatchdogMs, 150000);
-});
-
-test('toggle while transcribing reports busy', async () => {
+test('toggle while transcribing discards the old result and starts a new recording', async () => {
     let resolveTranscription;
+    let requests = 0;
     const {deps, calls} = createDeps({
+        cancelTranscription() { calls.push('cancelTranscription'); },
         async transcribeRecording() {
             calls.push('transcribeRecording');
+            if (++requests > 1)
+                return 'replacement text';
             return await new Promise(resolve => {
                 resolveTranscription = resolve;
             });
@@ -301,25 +285,26 @@ test('toggle while transcribing reports busy', async () => {
     for (let i = 0; i < 40 && typeof resolveTranscription !== 'function'; i += 1)
         await Promise.resolve();
 
-    await controller.toggle();
+    const replacement = controller.toggle();
+    let completed = false;
+    replacement.then(() => { completed = true; });
+    for (let i = 0; i < 100 && !completed; i += 1)
+        await Promise.resolve();
+    assert(completed, 'replacement must not wait for the discarded response');
     assert(typeof resolveTranscription === 'function');
     resolveTranscription('done');
     await pending;
 
-    const busyNotification = calls.find(c => c.startsWith('notify:Transcription in progress'));
-    assertIncludes(String(busyNotification), 'Transcription in progress');
-});
-
-test('toggle reports busy when state is transcribing without active lock', async () => {
-    const {deps, calls} = createDeps();
-    const controller = new WhisperController(deps);
-
-    controller._state = 'transcribing';
-    controller._toggleInFlight = false;
-
+    assertEqual(controller.state, 'recording');
+    assertEqual(calls.filter(c => c.startsWith('startRecording:')).length, 2);
+    assert(!calls.some(c => c.startsWith('copyToClipboard:')));
+    assert(!calls.includes('playTone:success'));
+    assert(calls.includes('cancelTranscription'));
     await controller.toggle();
-
-    assert(calls.some(c => c.startsWith('notify:Transcription in progress')));
+    assertEqual(controller.state, 'idle');
+    assert(calls.includes('copyToClipboard:replacement text'));
+    assert(!calls.includes('copyToClipboard:done'));
+    await controller.disable();
 });
 
 test('disable while recording stops resources and cleans up', async () => {
@@ -332,7 +317,6 @@ test('disable while recording stops resources and cleans up', async () => {
     assertEqual(controller.state, 'idle');
     assert(calls.includes('hideOverlay'));
     assert(calls.includes('recording.stop'));
-    assert(calls.includes('level.stop'));
     assert(calls.includes('cleanupRecording:/tmp/recording.wav'));
 });
 
@@ -372,63 +356,12 @@ test('disable from idle is a no-op', async () => {
     assert(!calls.includes('hideOverlay'));
 });
 
-test('disable from transcribing resets state to idle', async () => {
-    const {deps} = createDeps();
-    const controller = new WhisperController(deps);
-
-    controller._state = 'transcribing';
-    controller._session = {path: '/tmp/recording.wav'};
-
-    await controller.disable();
-
-    assertEqual(controller.state, 'idle');
-    assertEqual(controller._session, null);
-});
-
-test('watchdog resets transcribing state and cleans up', async () => {
-    const {deps, calls} = createDeps({
-        transcribingWatchdogMs: 100,
-    });
-    const controller = new WhisperController(deps);
-
-    controller._state = 'transcribing';
-    controller._session = {path: '/tmp/recording.wav'};
-    controller._startTranscribingWatchdog(controller._session);
-
-    await waitMs(180);
-
-    assertEqual(controller.state, 'idle');
-    assert(calls.some(c => c.startsWith('notify:Transcription took too long')));
-    assert(calls.includes('cleanupRecording:/tmp/recording.wav'));
-});
-
-test('watchdog exits quietly when no longer transcribing', async () => {
-    const {deps, calls} = createDeps({
-        transcribingWatchdogMs: 100,
-    });
-    const controller = new WhisperController(deps);
-
-    controller._state = 'idle';
-    controller._session = null;
-    controller._startTranscribingWatchdog({path: '/tmp/recording.wav'});
-
-    await waitMs(180);
-
-    assert(!calls.some(c => c.startsWith('notify:Transcription took too long')));
-});
-
 test('no detected speech skips transcription and notifies', async () => {
     const {deps, calls} = createDeps({
-        async startLevelMonitor(onLevel) {
-            calls.push('startLevelMonitor');
+        async startRecording(path, onLevel) {
             for (let i = 0; i < 8; i += 1)
                 onLevel(0.02);
-
-            return {
-                async stop() {
-                    calls.push('level.stop');
-                },
-            };
+            return {async stop() { calls.push('recording.stop'); }};
         },
     });
     const controller = new WhisperController(deps);
@@ -442,14 +375,18 @@ test('no detected speech skips transcription and notifies', async () => {
     assert(calls.includes('playTone:error'));
 });
 
-test('recording state with missing session resets to idle', async () => {
-    const {deps} = createDeps();
+
+test('transcription timeout returns to idle and permits another recording', async () => {
+    const {deps, calls} = createDeps({
+        transcriptionTimeoutMs: 100,
+        transcribeRecording() { return new Promise(() => {}); },
+    });
     const controller = new WhisperController(deps);
-
-    controller._state = 'recording';
-    controller._session = null;
-
     await controller.toggle();
-
+    await controller.toggle();
     assertEqual(controller.state, 'idle');
+    assert(calls.some(c => c.startsWith('notify:Transcription failed: Operation timed out')));
+    await controller.toggle();
+    assertEqual(controller.state, 'recording');
+    await controller.disable();
 });

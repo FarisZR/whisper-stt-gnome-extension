@@ -4,7 +4,6 @@ import GLib from 'gi://GLib';
 Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async');
 Gio._promisify(Gio.Subprocess.prototype, 'wait_async');
 Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async', 'read_line_finish_utf8');
-Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async', 'read_bytes_finish');
 
 const PROCESS_STOP_TIMEOUT_MS = 10000;
 
@@ -24,27 +23,9 @@ async function _drainPipe(stream, onLine, cancellable) {
             if (typeof onLine === 'function')
                 onLine(line);
         }
-    } catch (_error) {
-        // Ignore pipe read errors during shutdown.
-    }
-}
-
-async function _drainBytes(stream, onChunk, cancellable) {
-    if (!stream)
-        return;
-
-    try {
-        while (true) {
-            const bytes = await stream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, cancellable);
-
-            if (!bytes || bytes.get_size() === 0)
-                break;
-
-            if (typeof onChunk === 'function')
-                onChunk(bytes.toArray());
-        }
-    } catch (_error) {
-        // Ignore pipe read errors during shutdown.
+    } catch (error) {
+        if (!cancellable.is_cancelled())
+            console.error('[whisper-stt] Pipe read failed:', error);
     }
 }
 
@@ -147,13 +128,29 @@ async function _stopProcess(process, cancellable, drainPromises, timeoutMs) {
     throw new Error(`Subprocess did not exit gracefully within ${timeoutMs} ms and was force-killed`);
 }
 
-export async function runCommand(argv, input = null) {
+export async function runCommand(argv, input = null, {cancellable = null, timeoutMs = 120000} = {}) {
     const process = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE |
         Gio.SubprocessFlags.STDERR_PIPE |
         Gio.SubprocessFlags.STDIN_PIPE);
 
-    const [stdout, stderr] = await process.communicate_utf8_async(input, null);
+    const operation = cancellable ?? new Gio.Cancellable();
+    let timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
+        timeoutId = 0;
+        operation.cancel();
+        return GLib.SOURCE_REMOVE;
+    });
+    let stdout, stderr;
+    try {
+        [stdout, stderr] = await process.communicate_utf8_async(input, operation);
+    } catch (error) {
+        process.force_exit();
+        await process.wait_async(null);
+        throw error;
+    } finally {
+        if (timeoutId)
+            GLib.source_remove(timeoutId);
+    }
 
     return {
         stdout: stdout ?? '',
@@ -163,14 +160,18 @@ export async function runCommand(argv, input = null) {
     };
 }
 
-function _spawnDrainedProcess(argv, drainStdout, onStderrLine, stopTimeoutMs) {
+export function spawnLineProcess(argv, {
+    onStdoutLine = null,
+    onStderrLine = null,
+    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
+} = {}) {
     const process = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE |
         Gio.SubprocessFlags.STDERR_PIPE);
 
     const cancellable = new Gio.Cancellable();
     const drainPromises = [
-        drainStdout(process.get_stdout_pipe(), cancellable),
+        _drainPipe(process.get_stdout_pipe(), onStdoutLine, cancellable),
         _drainPipe(process.get_stderr_pipe(), onStderrLine, cancellable),
     ];
     let stopPromise = null;
@@ -182,30 +183,4 @@ function _spawnDrainedProcess(argv, drainStdout, onStderrLine, stopTimeoutMs) {
             await stopPromise;
         },
     };
-}
-
-export function spawnLineProcess(argv, {
-    onStdoutLine = null,
-    onStderrLine = null,
-    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
-} = {}) {
-    return _spawnDrainedProcess(
-        argv,
-        (stream, cancellable) => _drainPipe(stream, onStdoutLine, cancellable),
-        onStderrLine,
-        stopTimeoutMs
-    );
-}
-
-export function spawnByteProcess(argv, {
-    onStdoutChunk = null,
-    onStderrLine = null,
-    stopTimeoutMs = PROCESS_STOP_TIMEOUT_MS,
-} = {}) {
-    return _spawnDrainedProcess(
-        argv,
-        (stream, cancellable) => _drainBytes(stream, onStdoutChunk, cancellable),
-        onStderrLine,
-        stopTimeoutMs
-    );
 }

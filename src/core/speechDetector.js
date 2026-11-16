@@ -11,12 +11,7 @@ function _normalizeLevel(level) {
     return Math.max(0, Math.min(1, numeric));
 }
 
-export function createSpeechDetector({
-    levelThreshold = DEFAULT_LEVEL_THRESHOLD,
-    minActiveSamples = DEFAULT_MIN_ACTIVE_SAMPLES,
-    peakShortcut = DEFAULT_PEAK_SHORTCUT,
-} = {}) {
-    let sampleCount = 0;
+export function createSpeechDetector() {
     let activeSampleCount = 0;
     let peak = 0;
 
@@ -24,26 +19,17 @@ export function createSpeechDetector({
         pushLevel(level) {
             const normalized = _normalizeLevel(level);
 
-            sampleCount += 1;
             peak = Math.max(peak, normalized);
 
-            if (normalized >= levelThreshold)
+            if (normalized >= DEFAULT_LEVEL_THRESHOLD)
                 activeSampleCount += 1;
         },
 
         hasSpeech() {
-            if (peak >= peakShortcut)
+            if (peak >= DEFAULT_PEAK_SHORTCUT)
                 return true;
 
-            return activeSampleCount >= minActiveSamples;
-        },
-
-        getStats() {
-            return {
-                sampleCount,
-                activeSampleCount,
-                peak,
-            };
+            return activeSampleCount >= DEFAULT_MIN_ACTIVE_SAMPLES;
         },
     };
 }

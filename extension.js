@@ -21,22 +21,27 @@ export default class WhisperSttExtension extends Extension {
             title: this.metadata.name,
         }));
 
-        Main.wm.addKeybinding(
-            KEYBINDING_NAME,
-            this._settings,
-            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
-            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP,
-            () => {
-                void this._controller.toggle();
-            }
-        );
+        try {
+            Main.wm.addKeybinding(
+                KEYBINDING_NAME,
+                this._settings,
+                Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP,
+                () => {
+                    void this._controller.toggle().catch(error => console.error('[whisper-stt] Toggle failed:', error));
+                }
+            );
+        } catch (error) {
+            this.disable();
+            throw error;
+        }
     }
 
     disable() {
         Main.wm.removeKeybinding(KEYBINDING_NAME);
 
         if (this._controller)
-            void this._controller.disable();
+            void this._controller.disable().catch(error => console.error('[whisper-stt] Shutdown failed:', error));
 
         this._overlay?.destroy();
         this._overlay = null;

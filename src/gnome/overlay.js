@@ -6,6 +6,7 @@ import * as Layout from 'resource:///org/gnome/shell/ui/layout.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const LEVEL_TICK_INTERVAL_MS = 50;
+const LEVEL_STALE_US = 250000;
 const LEVEL_ATTACK_SMOOTHING = 0.45;
 const LEVEL_RELEASE_SMOOTHING = 0.2;
 const BAR_COUNT = 18;
@@ -22,6 +23,7 @@ export class VoiceOverlay {
         this._targetLevel = 0;
         this._visibleLevel = 0;
         this._phase = 0;
+        this._lastSampleAt = 0;
     }
 
     show() {
@@ -52,6 +54,7 @@ export class VoiceOverlay {
             return;
 
         this._targetLevel = Math.max(0, Math.min(1, Number(level) || 0));
+        this._lastSampleAt = GLib.get_monotonic_time();
     }
 
     destroy() {
@@ -117,6 +120,8 @@ export class VoiceOverlay {
             return;
 
         this._tickId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LEVEL_TICK_INTERVAL_MS, () => {
+            if (GLib.get_monotonic_time() - this._lastSampleAt > LEVEL_STALE_US)
+                this._targetLevel = 0;
             const smoothing = this._targetLevel >= this._visibleLevel
                 ? LEVEL_ATTACK_SMOOTHING
                 : LEVEL_RELEASE_SMOOTHING;

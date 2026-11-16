@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${1:-$ROOT_DIR/dist}"
 COMMIT="${2:-$(git -C "$ROOT_DIR" rev-parse HEAD)}"
+if [[ "$COMMIT" != "$(git -C "$ROOT_DIR" rev-parse HEAD)" ]]; then
+    echo 'Build commit must match the checked-out HEAD.' >&2
+    exit 1
+fi
 BUILD_NUMBER="$(git -C "$ROOT_DIR" rev-list --count "$COMMIT")"
 
 mkdir -p "$OUT_DIR"

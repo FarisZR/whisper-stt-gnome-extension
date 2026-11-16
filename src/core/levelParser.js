@@ -1,35 +1,23 @@
-function _dbToLinear(db) {
-    if (db <= -70)
-        return 0;
-
-    if (db >= -6)
-        return 1;
-
-    const normalized = (db + 70) / 64;
-    return Math.pow(normalized, 0.65);
+function _amplitude(line, name) {
+    const section = line.match(new RegExp(`${name}\\s*=\\s*\\(GValueArray\\)\\s*<([^>]+)>`, 'i'));
+    if (!section)
+        return null;
+    const values = section[1].match(/-?(?:\d+(?:[.,]\d+)?(?:e[+-]?\d+)?|inf)/gi);
+    if (!values)
+        return null;
+    const db = Math.max(...values.map(value => value.toLowerCase() === '-inf'
+        ? -Infinity : Number.parseFloat(value.replace(',', '.'))));
+    return Math.pow(10, db / 20);
 }
 
 export function parseLevelLine(line) {
-    if (typeof line !== 'string' || !line.toLowerCase().includes('peak'))
+    if (typeof line !== 'string')
         return null;
-
-    const sectionMatch = line.match(/peak\s*=\s*\(GValueArray\)\s*<([^>]+)>/i);
-
-    if (!sectionMatch)
+    const peak = _amplitude(line, 'peak');
+    if (peak === null)
         return null;
-
-    const matches = [...sectionMatch[1].matchAll(/-?\d+(?:[\.,]\d+)?/g)];
-
-    if (matches.length === 0)
-        return null;
-
-    const values = matches.map(match => Number.parseFloat(match[0].replace(',', '.')));
-
-    const peakDb = Math.max(...values);
-    return _dbToLinear(peakDb);
-}
-
-export function smoothLevel(previous, current, factor = 0.35) {
-    const clampedFactor = Math.max(0, Math.min(1, factor));
-    return previous * (1 - clampedFactor) + current * clampedFactor;
+    const rms = _amplitude(line, 'rms') ?? peak;
+    const normalizedRms = Math.min(1, Math.max(0, rms - 0.0008) * 20);
+    const normalizedPeak = Math.min(1, Math.max(0, peak - 0.002) * 8);
+    return Math.pow(Math.max(normalizedRms, normalizedPeak * 0.8), 0.65);
 }

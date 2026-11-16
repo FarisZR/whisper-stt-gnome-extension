@@ -1,19 +1,15 @@
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {buildRecordingCommand} from '../core/pipelineCommand.js';
-import {smoothLevel} from '../core/levelParser.js';
-import {pcmS16Level} from '../core/pcmLevel.js';
+import {parseLevelLine} from '../core/levelParser.js';
 import {buildCurlArgs} from '../core/curlCommand.js';
 import {splitBodyAndStatus, parseTranscriptionResponse} from '../core/transcriptionParser.js';
-import {getToneEvents} from '../core/toneEvents.js';
-import {runCommand, spawnLineProcess, spawnByteProcess} from './process.js';
-
-const METER_STALE_TIMEOUT_US = 250000;
-const METER_DECAY_INTERVAL_MS = 50;
-const METER_DECAY_SMOOTHING = 0.2;
+import {playTone} from '../core/tonePlayer.js';
+import {runCommand, spawnLineProcess} from './process.js';
 
 function _settingsToObject(settings) {
     return {
@@ -31,12 +27,11 @@ function _settingsToObject(settings) {
         proxyPassword: settings.get_string('proxy-password'),
         bypassVpnEnabled: settings.get_boolean('bypass-vpn-enabled'),
         bypassVpnInterface: settings.get_string('bypass-vpn-interface'),
-        shortcut: settings.get_strv('toggle-recording-shortcut'),
     };
 }
 
 function _createRecordingPath() {
-    const timestamp = GLib.DateTime.new_now_local().format('%Y%m%d-%H%M%S');
+    const timestamp = GLib.uuid_string_random();
     return GLib.build_filenamev([GLib.get_tmp_dir(), `whisper-stt-${timestamp}.wav`]);
 }
 
@@ -47,13 +42,12 @@ function _deleteFile(path) {
     try {
         GLib.unlink(path);
     } catch (_error) {
-        // Ignore failed cleanup.
     }
 }
 
-async function _transcribeRecording(path, settings) {
+async function _transcribeRecording(path, settings, cancellable) {
     const args = buildCurlArgs(settings, path);
-    const {stdout, stderr, success} = await runCommand(args);
+    const {stdout, stderr, success} = await runCommand(args, null, {cancellable});
     const {body, statusCode} = splitBodyAndStatus(stdout);
 
     if (!success && statusCode === 0)
@@ -66,113 +60,9 @@ async function _copyToClipboard(text) {
     St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
 }
 
-async function _playTone(kind) {
-    const eventIds = getToneEvents(kind);
-
-    for (const eventId of eventIds) {
-        try {
-            const result = await runCommand(['canberra-gtk-play', '-i', eventId]);
-
-            if (result.success)
-                return;
-        } catch (_error) {
-            // Try fallback tone ids.
-        }
-    }
-}
-
 export function createRuntimeDeps({settings, overlay, title}) {
-    const levelListeners = new Set();
-    let currentLevel = 0;
-    let meterProcess = null;
-    let meterDecayTimeoutId = 0;
-    let lastMeterSampleAt = 0;
+    let transcription = null;
 
-    const notifyLevelListeners = () => {
-        for (const listener of levelListeners)
-            listener(currentLevel);
-    };
-
-    const startMeterDecay = () => {
-        if (meterDecayTimeoutId !== 0)
-            return;
-
-        meterDecayTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, METER_DECAY_INTERVAL_MS, () => {
-            if (levelListeners.size === 0)
-                return GLib.SOURCE_CONTINUE;
-
-            const now = GLib.get_monotonic_time();
-
-            if (now - lastMeterSampleAt > METER_STALE_TIMEOUT_US) {
-                currentLevel = smoothLevel(currentLevel, 0, METER_DECAY_SMOOTHING);
-                notifyLevelListeners();
-            }
-
-            return GLib.SOURCE_CONTINUE;
-        });
-        GLib.Source.set_name_by_id(meterDecayTimeoutId, '[whisper-stt] meter-decay');
-    };
-
-    const stopMeterDecay = () => {
-        if (meterDecayTimeoutId === 0)
-            return;
-
-        GLib.source_remove(meterDecayTimeoutId);
-        meterDecayTimeoutId = 0;
-    };
-
-    const startMeter = () => {
-        if (meterProcess)
-            return;
-
-        try {
-            lastMeterSampleAt = GLib.get_monotonic_time();
-
-            meterProcess = spawnByteProcess([
-                'pw-record',
-                '--raw',
-                '--rate',
-                '16000',
-                '--channels',
-                '1',
-                '--format',
-                's16',
-                '-',
-            ], {
-                onStdoutChunk: chunk => {
-                    const level = pcmS16Level(chunk);
-                    lastMeterSampleAt = GLib.get_monotonic_time();
-                    currentLevel = smoothLevel(currentLevel, level, 0.25);
-                    notifyLevelListeners();
-                },
-                onStderrLine: line => {
-                    if (line.toLowerCase().includes('error'))
-                        log(`[whisper-stt] meter: ${line}`);
-                },
-            });
-
-            startMeterDecay();
-        } catch (error) {
-            meterProcess = null;
-            log(`[whisper-stt] Failed to start microphone meter: ${error}`);
-        }
-    };
-
-    const stopMeter = async () => {
-        stopMeterDecay();
-
-        if (!meterProcess) {
-            currentLevel = 0;
-            lastMeterSampleAt = 0;
-            return;
-        }
-
-        const process = meterProcess;
-        meterProcess = null;
-        await process.stop();
-        currentLevel = 0;
-        lastMeterSampleAt = 0;
-    };
 
     return {
         getSettings() {
@@ -183,40 +73,33 @@ export function createRuntimeDeps({settings, overlay, title}) {
             return _createRecordingPath();
         },
 
-        async startRecording(path) {
-            currentLevel = 0;
-            const command = buildRecordingCommand(path);
-            const processHandle = spawnLineProcess(command, {
+        async startRecording(path, onLevel) {
+            return spawnLineProcess(buildRecordingCommand(path), {
+                onStdoutLine: line => {
+                    const level = parseLevelLine(line);
+                    if (level !== null)
+                        onLevel(level);
+                },
                 onStderrLine: line => {
                     if (line.includes('ERROR'))
-                        log(`[whisper-stt] ${line}`);
+                        console.error(`[whisper-stt] ${line}`);
                 },
             });
-
-            return {
-                async stop() {
-                    await processHandle.stop();
-                },
-            };
-        },
-
-        async startLevelMonitor(onLevel) {
-            levelListeners.add(onLevel);
-            onLevel(currentLevel);
-            startMeter();
-
-            return {
-                async stop() {
-                    levelListeners.delete(onLevel);
-
-                    if (levelListeners.size === 0)
-                        await stopMeter();
-                },
-            };
         },
 
         async transcribeRecording(path, normalizedSettings) {
-            return await _transcribeRecording(path, normalizedSettings);
+            const operation = new Gio.Cancellable();
+            transcription = operation;
+            try {
+                return await _transcribeRecording(path, normalizedSettings, operation);
+            } finally {
+                if (transcription === operation)
+                    transcription = null;
+            }
+        },
+
+        cancelTranscription() {
+            transcription?.cancel();
         },
 
         async copyToClipboard(text) {
@@ -224,7 +107,7 @@ export function createRuntimeDeps({settings, overlay, title}) {
         },
 
         async playTone(kind) {
-            await _playTone(kind);
+            await playTone(kind, {runCommand});
         },
 
         showOverlay() {
@@ -244,9 +127,6 @@ export function createRuntimeDeps({settings, overlay, title}) {
         },
 
         async cleanupRecording(path) {
-            if (levelListeners.size === 0)
-                await stopMeter();
-
             _deleteFile(path);
         },
     };

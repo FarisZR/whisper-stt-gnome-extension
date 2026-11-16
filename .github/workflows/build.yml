@@ -27,7 +27,7 @@ jobs:
       - name: Install build and test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gjs gnome-shell libglib2.0-bin
+          sudo apt-get install -y --no-install-recommends gjs gnome-shell libglib2.0-bin gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
       - name: Identify build
         id: version
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -57,47 +57,20 @@ jobs:
     outputs:
       published: ${{ steps.release.outputs.published }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: extension-bundles
           path: dist
-      - name: Publish immutable commit release
+      - name: Publish latest main build
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_COMMIT: ${{ needs.build.outputs.commit }}
         run: |
-          set -euo pipefail
-          # Do not let a delayed build move the tap back to an older commit.
-          current=$(gh api repos/FarisZR/whisper-stt-gnome-extension/commits/main --jq .sha)
-          if [ "$current" != "$BUILD_COMMIT" ]; then
-            echo "A newer main commit exists; skipping publication."
-            exit 0
-          fi
-          cd dist
-          sha256sum --check SHA256SUMS
-          tag="build-$BUILD_COMMIT"
-          if ! gh release view "$tag" --repo FarisZR/whisper-stt-gnome-extension >/dev/null 2>&1; then
-            gh release create "$tag" --repo FarisZR/whisper-stt-gnome-extension \
-              --target "$BUILD_COMMIT" --draft \
-              --title "Rolling build $BUILD_COMMIT" \
-              --notes "GNOME Shell 49/50/51 extension built from commit $BUILD_COMMIT."
-            gh release upload "$tag" --repo FarisZR/whisper-stt-gnome-extension \
-              ./*.zip ./*.tar.gz SHA256SUMS
-          fi
-          # Repeated builds keep published assets unchanged. A failed draft
-          # upload can be recovered by deleting the draft and rerunning.
-          gh release view "$tag" --repo FarisZR/whisper-stt-gnome-extension \
-            --json assets --jq '[.assets[].name] | sort' > /tmp/assets.json
-          python3 -c 'import json; assert json.load(open("/tmp/assets.json")) == ["SHA256SUMS", "whisper-stt-gnome-extension.tar.gz", "whisper-stt@fariszr.com.shell-extension.zip"]'
-          gh release edit "$tag" --repo FarisZR/whisper-stt-gnome-extension --draft=false --latest=false
-          current=$(gh api repos/FarisZR/whisper-stt-gnome-extension/commits/main --jq .sha)
-          if [ "$current" != "$BUILD_COMMIT" ]; then
-            echo "A newer main commit arrived during upload; leaving this release non-latest."
-            exit 0
-          fi
-          gh release edit "$tag" --repo FarisZR/whisper-stt-gnome-extension --latest
-          echo 'published=true' >> "$GITHUB_OUTPUT"
+          ./scripts/publish.sh
 
   update-homebrew:
     needs: publish

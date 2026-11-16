@@ -13,7 +13,6 @@ function _extractErrorMessage(body) {
         if (typeof parsed?.message === 'string')
             return parsed.message;
     } catch (_error) {
-        // Fall through and return raw body.
     }
 
     return trimmed;
@@ -56,7 +55,6 @@ export function parseTranscriptionResponse(body, statusCode) {
         if (typeof parsed?.text === 'string')
             return parsed.text;
     } catch (_error) {
-        // Plain text response.
     }
 
     return trimmed;

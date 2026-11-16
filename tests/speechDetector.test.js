@@ -1,4 +1,4 @@
-import {test, assert, assertEqual} from './harness.js';
+import {test, assertEqual} from './harness.js';
 import {createSpeechDetector} from '../src/core/speechDetector.js';
 
 test('speech detector starts without speech', () => {
@@ -39,6 +39,5 @@ test('speech detector ignores invalid level values', () => {
     detector.pushLevel(undefined);
     detector.pushLevel('a');
 
-    assert(detector.getStats().sampleCount >= 3);
     assertEqual(detector.hasSpeech(), false);
 });

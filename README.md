@@ -48,18 +48,13 @@ Then restart GNOME Shell (Log out/in on Wayland, or Alt+F2 typed 'r' on X11) and
 
 ### Manual Installation
 
-1. Create the extension directory:
-   ```bash
-   mkdir -p ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com
-   ```
-2. Copy the extension files:
-   ```bash
-   cp -r ./* ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com/
-   ```
-3. Compile the schemas:
-   ```bash
-   glib-compile-schemas ~/.local/share/gnome-shell/extensions/whisper-stt@fariszr.com/schemas/
-   ```
+Build and install the same validated bundle used by the release workflow:
+
+```bash
+./scripts/package.sh
+python3 tests/check_package.py dist
+gnome-extensions install --force dist/whisper-stt@fariszr.com.shell-extension.zip
+```
 
 After installing, restart GNOME Shell and enable the extension:
 
@@ -70,6 +65,7 @@ gnome-extensions enable whisper-stt@fariszr.com
 ## Features
 
 - Toggle recording with one shortcut press (start/stop)
+- Press again during transcription to discard that request and start a new recording
 - Live voice graph overlay while recording
 - OpenAI-style `/v1/audio/transcriptions` request flow
 - Works with empty API key (no Authorization header sent)
@@ -133,6 +129,10 @@ Published bundles remain unchanged when a build is rerun. Only builds of the
 current `main` commit are marked latest, so delayed builds cannot select an old
 commit. The workflow can also be run manually on `main`.
 
+No tag push is needed to build or update Homebrew. The generated `build-<sha>`
+tags only identify immutable downloads; every push to `main` rolls the package
+forward automatically after tests pass.
+
 After publication, the workflow dispatches the Homebrew tap's `sync.yml`, which
 checks the release asset and checksum and commits the updated cask. The tap also
 checks for updates every six hours.
@@ -145,14 +145,32 @@ permission is needed on that PAT. Release publication uses the built-in
 See the tap's [token setup](https://github.com/FarisZR/homebrew-tap/blob/main/docs/tokens.md).
 Without the dispatch secret, builds still publish and scheduled tap sync still works.
 
-If publication fails after creating a draft release, delete that incomplete draft
-and rerun the workflow on `main`. Never replace assets on a published commit release.
+If publication fails during upload, rerun the workflow on `main`. The publisher
+repairs incomplete draft uploads and preserves already published assets.
 
-Run tests with coverage output:
+### Code map
+
+`extension.js` owns the Shell shortcut and overlay lifecycle. `WhisperController`
+owns the recording session and transcription flow through injected dependencies.
+`src/core` contains request, audio-level and speech policies; `src/gnome` adapts
+them to Shell, GSettings and subprocesses. The recorder supplies both the WAV
+and speech levels from the same microphone stream. `prefs.js` binds widgets to
+GSettings; `scripts/package.sh` produces the shared install/release payload.
+
+See [the decision log](docs/untangle-decisions.md) for the structural inventory,
+retained external constraints and compatibility verification. Package metadata
+labels the checked-out HEAD; local bundles include uncommitted runtime edits.
+
+Run tests with coverage output (reported for review, without an exact-coverage gate):
 
 ```bash
 ./scripts/coverage.sh
 ```
+
+On Fedora with GNOME Shell 51, run `./scripts/shell-smoke.sh` to test extension
+loading, overlay construction, preferences bindings and disable in a temporary
+headless Shell and private D-Bus session. This requires `unzip` and `rg` as well
+as the build dependencies. It does not install into your desktop profile.
 
 Compile extension schemas after editing `schemas/*.xml`:
 

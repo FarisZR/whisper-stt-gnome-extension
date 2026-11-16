@@ -1,7 +1,6 @@
 const DEFAULT_ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
 const DEFAULT_MODEL = 'whisper-1';
 const DEFAULT_RESPONSE_FORMAT = 'json';
-const DEFAULT_SHORTCUT = ['<Ctrl><Super>space'];
 const DEFAULT_PROXY_PORT = '1080';
 const DEFAULT_PROXY_TYPE = 'socks5';
 
@@ -10,17 +9,6 @@ function _asTrimmedString(value) {
         return '';
 
     return value.trim();
-}
-
-function _normalizeShortcut(value) {
-    if (!Array.isArray(value))
-        return [...DEFAULT_SHORTCUT];
-
-    const cleaned = value
-        .map(item => _asTrimmedString(item))
-        .filter(item => item.length > 0);
-
-    return cleaned.length > 0 ? cleaned : [...DEFAULT_SHORTCUT];
 }
 
 function _normalizeProxyType(value) {
@@ -43,7 +31,6 @@ export function normalizeSettings(raw = {}) {
     const proxyPassword = _asTrimmedString(raw.proxyPassword);
     const bypassVpnEnabled = raw.bypassVpnEnabled === true;
     const bypassVpnInterface = _asTrimmedString(raw.bypassVpnInterface);
-    const shortcut = _normalizeShortcut(raw.shortcut);
 
     return {
         endpoint,
@@ -60,24 +47,5 @@ export function normalizeSettings(raw = {}) {
         proxyPassword,
         bypassVpnEnabled,
         bypassVpnInterface,
-        shortcut,
     };
 }
-
-export const SETTINGS_DEFAULTS = Object.freeze({
-    endpoint: DEFAULT_ENDPOINT,
-    model: DEFAULT_MODEL,
-    apiKey: '',
-    language: '',
-    prompt: '',
-    responseFormat: DEFAULT_RESPONSE_FORMAT,
-    proxyEnabled: false,
-    proxyType: DEFAULT_PROXY_TYPE,
-    proxyHost: '',
-    proxyPort: DEFAULT_PROXY_PORT,
-    proxyUsername: '',
-    proxyPassword: '',
-    bypassVpnEnabled: false,
-    bypassVpnInterface: '',
-    shortcut: [...DEFAULT_SHORTCUT],
-});
