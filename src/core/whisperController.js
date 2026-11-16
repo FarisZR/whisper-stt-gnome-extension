@@ -211,7 +211,7 @@ export class WhisperController {
             this._session = null;
             this._state = 'idle';
 
-            if (!this._disabled && !session.discarded)
+            if (!this._disabled && !session.discarded && normalizeSettings(this._deps.getSettings()).soundsEnabled)
                 void this._runBestEffort(() => this._deps.playTone(toneKind));
             this._deps.cancelTranscription?.();
             await this._runBestEffort(() => this._deps.cleanupRecording(session.path), 1000);

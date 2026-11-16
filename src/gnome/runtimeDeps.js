@@ -19,6 +19,7 @@ function _settingsToObject(settings) {
         language: settings.get_string('language'),
         prompt: settings.get_string('prompt'),
         responseFormat: settings.get_string('response-format'),
+        soundsEnabled: settings.get_boolean('sounds-enabled'),
         proxyEnabled: settings.get_boolean('proxy-enabled'),
         proxyType: settings.get_string('proxy-type'),
         proxyHost: settings.get_string('proxy-host'),

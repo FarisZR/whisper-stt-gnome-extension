@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.whisper-stt" path="/org/gnome/shell/extensions/whisper-stt/">
+    <key name="sounds-enabled" type="b">
+      <default>true</default>
+      <summary>Play feedback sounds</summary>
+      <description>
+        Play a short success or error sound when recording and transcription finish.
+        Disable to mute all extension sounds while keeping notifications.
+      </description>
+    </key>
     <key name="transcription-endpoint" type="s">
       <default>'https://api.openai.com/v1/audio/transcriptions'</default>
       <summary>Speech-to-text endpoint</summary>

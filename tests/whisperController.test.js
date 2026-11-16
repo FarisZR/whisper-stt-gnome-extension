@@ -127,6 +127,50 @@ test('empty transcription skips clipboard copy', async () => {
     assert(calls.includes('playTone:success'));
 });
 
+test('muting sounds preserves successful clipboard copy and notification', async () => {
+    const {deps, calls} = createDeps({getSettings() { return {soundsEnabled: false}; }});
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    await controller.toggle();
+
+    assertEqual(controller.state, 'idle');
+    assert(calls.includes('copyToClipboard:hello world'));
+    assert(calls.includes('notify:Transcription copied to clipboard'));
+    assert(!calls.some(c => c.startsWith('playTone:')));
+});
+
+test('muting sounds also suppresses error tones and preserves error notifications', async () => {
+    const {deps, calls} = createDeps({
+        getSettings() { return {soundsEnabled: false}; },
+        async transcribeRecording() { throw new Error('HTTP 401'); },
+    });
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    await controller.toggle();
+
+    assertEqual(controller.state, 'idle');
+    assert(calls.includes('notify:Transcription failed: HTTP 401'));
+    assert(!calls.some(c => c.startsWith('playTone:')));
+});
+
+test('sound preference changes take effect for the current recording', async () => {
+    let soundsEnabled = true;
+    const {deps, calls} = createDeps({getSettings() { return {soundsEnabled}; }});
+    const controller = new WhisperController(deps);
+
+    await controller.toggle();
+    soundsEnabled = false;
+    await controller.toggle();
+    assert(!calls.some(c => c.startsWith('playTone:')));
+
+    await controller.toggle();
+    soundsEnabled = true;
+    await controller.toggle();
+    assertEqual(calls.filter(c => c === 'playTone:success').length, 1);
+});
+
 test('non-string transcription skips clipboard copy', async () => {
     const {deps, calls} = createDeps({
         async transcribeRecording() {

@@ -3,6 +3,7 @@ const DEFAULT_MODEL = 'whisper-1';
 const DEFAULT_RESPONSE_FORMAT = 'json';
 const DEFAULT_PROXY_PORT = '1080';
 const DEFAULT_PROXY_TYPE = 'socks5';
+const DEFAULT_SOUNDS_ENABLED = true;
 
 function _asTrimmedString(value) {
     if (typeof value !== 'string')
@@ -23,6 +24,7 @@ export function normalizeSettings(raw = {}) {
     const language = _asTrimmedString(raw.language);
     const prompt = _asTrimmedString(raw.prompt);
     const responseFormat = _asTrimmedString(raw.responseFormat) || DEFAULT_RESPONSE_FORMAT;
+    const soundsEnabled = typeof raw.soundsEnabled === 'boolean' ? raw.soundsEnabled : DEFAULT_SOUNDS_ENABLED;
     const proxyEnabled = raw.proxyEnabled === true;
     const proxyType = _normalizeProxyType(raw.proxyType);
     const proxyHost = _asTrimmedString(raw.proxyHost);
@@ -39,6 +41,7 @@ export function normalizeSettings(raw = {}) {
         language,
         prompt,
         responseFormat,
+        soundsEnabled,
         proxyEnabled,
         proxyType,
         proxyHost,

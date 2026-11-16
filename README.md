@@ -70,11 +70,13 @@ gnome-extensions enable whisper-stt@fariszr.com
 - OpenAI-style `/v1/audio/transcriptions` request flow
 - Works with empty API key (no Authorization header sent)
 - Copies transcript to the GNOME clipboard
+- One light success sound, with an option to mute all sounds and keep notifications
 
 ## Settings
 
 Open extension preferences and configure:
 
+- `Play sounds` (enabled by default; turn off under `Feedback` to mute success and error sounds while keeping notifications)
 - `Endpoint` (default: `https://api.openai.com/v1/audio/transcriptions`)
 - `Model` (default: `whisper-1`)
 - `API Key` (optional)

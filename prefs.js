@@ -45,6 +45,18 @@ export default class WhisperSttPreferences extends ExtensionPreferences {
         });
         window.add(page);
 
+        const feedbackGroup = new Adw.PreferencesGroup({
+            title: _('Feedback'),
+        });
+        page.add(feedbackGroup);
+
+        const soundsRow = new Adw.SwitchRow({
+            title: _('Play sounds'),
+            subtitle: _('Play a short success or error sound. Notifications are always shown.'),
+        });
+        settings.bind('sounds-enabled', soundsRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        feedbackGroup.add(soundsRow);
+
         const apiGroup = new Adw.PreferencesGroup({
             title: _('Transcription API'),
         });

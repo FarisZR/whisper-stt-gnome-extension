@@ -42,5 +42,14 @@ if (!toggle.active || !host.visible)
 toggle.active = false;
 if (settings.get_boolean('proxy-enabled') || host.visible)
     throw new Error('Disabling proxy must update setting and dependent visibility');
+const sounds = findRow(window, 'Play sounds');
+if (!sounds || !sounds.active || !settings.get_boolean('sounds-enabled'))
+    throw new Error('Sound feedback must be enabled by default');
+sounds.active = false;
+if (settings.get_boolean('sounds-enabled'))
+    throw new Error('Muting sounds must update GSettings');
+settings.set_boolean('sounds-enabled', true);
+if (!sounds.active)
+    throw new Error('External sound preference changes must update the switch');
 window.close();
 print('Preferences construction and bidirectional bindings passed.');

@@ -1,4 +1,4 @@
-import {test, assertDeepEqual} from './harness.js';
+import {test, assertDeepEqual, assertEqual} from './harness.js';
 import {normalizeSettings} from '../src/core/settings.js';
 
 test('normalizeSettings returns defaults', () => {
@@ -9,6 +9,7 @@ test('normalizeSettings returns defaults', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        soundsEnabled: true,
         proxyEnabled: false,
         proxyType: 'socks5',
         proxyHost: '',
@@ -43,6 +44,7 @@ test('normalizeSettings trims values and preserves empty api key', () => {
         language: 'en',
         prompt: 'say hi',
         responseFormat: 'text',
+        soundsEnabled: true,
         proxyEnabled: true,
         proxyType: 'http',
         proxyHost: '127.0.0.1',
@@ -66,6 +68,7 @@ test('normalizeSettings falls back for blank endpoint/model/format', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        soundsEnabled: true,
         proxyEnabled: false,
         proxyType: 'socks5',
         proxyHost: '',
@@ -100,6 +103,7 @@ test('normalizeSettings handles non-string values safely', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        soundsEnabled: true,
         proxyEnabled: false,
         proxyType: 'socks5',
         proxyHost: '',
@@ -123,6 +127,7 @@ test('normalizeSettings falls back to socks5 for unknown proxy type', () => {
         language: '',
         prompt: '',
         responseFormat: 'json',
+        soundsEnabled: true,
         proxyEnabled: true,
         proxyType: 'socks5',
         proxyHost: 'localhost',
@@ -132,4 +137,11 @@ test('normalizeSettings falls back to socks5 for unknown proxy type', () => {
         bypassVpnEnabled: false,
         bypassVpnInterface: '',
     });
+});
+
+test('normalizeSettings preserves the sound preference and defaults invalid values', () => {
+    assertEqual(normalizeSettings({soundsEnabled: false}).soundsEnabled, false);
+    assertEqual(normalizeSettings({soundsEnabled: true}).soundsEnabled, true);
+    assertEqual(normalizeSettings({soundsEnabled: 'false'}).soundsEnabled, true);
+    assertEqual(normalizeSettings({soundsEnabled: null}).soundsEnabled, true);
 });

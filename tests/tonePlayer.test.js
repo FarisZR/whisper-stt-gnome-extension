@@ -1,23 +1,42 @@
-import {test, assertEqual, assert} from './harness.js';
+import {test, assertEqual, assertDeepEqual, assert} from './harness.js';
 import {playTone} from '../src/core/tonePlayer.js';
 
-test('tone player tries alternatives after missing and unsuccessful events', async () => {
+test('success tone plays only the light message cue', async () => {
+    const commands = [];
+    await playTone('success', {
+        async runCommand(argv) {
+            commands.push(argv);
+            return {success: true};
+        },
+    });
+    assertDeepEqual(commands, [['canberra-gtk-play', '-i', 'message-new-instant']]);
+});
+
+test('unsuccessful playback does not trigger more sounds', async () => {
     const events = [];
     await playTone('success', {
         async runCommand(argv) {
             events.push(argv[2]);
-            if (events.length === 1)
-                throw new Error('event missing');
-            return {success: events.length === 3};
+            return {success: false};
         },
     });
-    assertEqual(events.length, 3);
-    assertEqual(new Set(events).size, 3);
+    assertDeepEqual(events, ['message-new-instant']);
 });
 
-test('tone player stops after the first available event', async () => {
+test('playback timeout does not trigger fallback sounds', async () => {
     let calls = 0;
-    await playTone('error', {async runCommand() { calls += 1; return {success: true}; }});
+    await playTone('success', {
+        async runCommand() {
+            calls += 1;
+            throw new Error('Operation timed out');
+        },
+    });
+    assertEqual(calls, 1);
+});
+
+test('error feedback attempts only one sound even when playback fails', async () => {
+    let calls = 0;
+    await playTone('error', {async runCommand() { calls += 1; return {success: false}; }});
     assertEqual(calls, 1);
 });
 
